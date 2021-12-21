@@ -14,7 +14,10 @@
 #include <string.h>
 
 #define TriggerBreakpoint()                                                                                            \
-    { printf("Abort called at func -> %s, line ->  %d.",__func__,__LINE__); abort(0);}
+    {                                                                                                                  \
+        printf("Abort called at func -> %s, line ->  %d.", __func__, __LINE__);                                        \
+        abort();                                                                                                      \
+    }
 
 typedef double (*trigfn)(double);
 
@@ -23,14 +26,19 @@ double GaussianIntegral(double x)
     return 4 * exp(-x * x / 2);
 }
 
-double inv(double x) 
+double inv(double x)
 {
-    return 1/x; 
+    return 1 / x;
 }
 
-double lin(double x) 
+double lin(double x)
 {
-    return x; 
+    return x;
+}
+
+double discont(double x) 
+{
+    return 1 / (x * x - 1); 
 }
 
 #define no_default_case() __assume(0)
@@ -96,7 +104,7 @@ void frame_change_callback(GLFWwindow *window, int width, int height)
     screen_width  = width;
     screen_height = height;
     glViewport(0, 0, width, height);
-    UserData *data    = glfwGetWindowUserPointer(window);
+    UserData *data     = glfwGetWindowUserPointer(window);
     *data->OrthoMatrix = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
 }
 
@@ -106,22 +114,24 @@ void key_callback(GLFWwindow *window, int key, int scancode, int mod, int action
         glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
-void scroll_callback(GLFWwindow* window,double xoffset, double yoffset)
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
-    // a suitable scaling value for scrolling 
-    const float scale = 5.0f; 
-    UserData *  data  = glfwGetWindowUserPointer(window); 
-    Graph *     graph = data->graph; 
-    graph->scale.y -= scale * yoffset; 
-    graph->scale.x -= scale * yoffset; 
+    // a suitable scaling value for scrolling
+    const float scale = 5.0f;
+    UserData *  data  = glfwGetWindowUserPointer(window);
+    Graph *     graph = data->graph;
+    graph->scale.y -= scale * yoffset;
+    graph->scale.x -= scale * yoffset;
     if (graph->scale.y <= 0)
         graph->scale.y = 1;
     if (graph->scale.x <= 0)
         graph->scale.x = 1;
+    if (xoffset)
+        fprintf(stderr, "X offset scroll callbacked is : %lf.", xoffset);
 }
 
 unsigned int LoadProgram(Shader vertex, Shader fragment)
-    {
+{
     if (vertex.type != VERTEX_SHADER && fragment.type != FRAGMENT_SHADER)
     {
         fprintf(stderr, "Shaders mismatched for program\n");
@@ -239,26 +249,23 @@ GLFWwindow *LoadGLFW(int width, int height, const char *title)
     return window;
 }
 
-
 typedef struct
 {
-    uint32_t  iCount;
-    uint32_t  vCount;
+    uint32_t iCount;
+    uint32_t vCount;
 
-    uint32_t  iMax;
-    uint32_t  vMax;
+    uint32_t iMax;
+    uint32_t vMax;
 
-    // index that marks the discontinuity of the vertices 
-    uint32_t  iDiscontinuity; 
-    uint32_t  dMax; 
-
+    // index that marks the discontinuity of the vertices
+    // dMax -> Maximum number of discontinuity allowed for a function
+    uint32_t  dCount;
+    uint32_t  dMax;
 
     uint32_t *Indices;
-    uint32_t *Discontinuity; 
+    uint32_t *Discontinuity;
     Vec2 *    Vertices;
 } RenderGroup;
-
-
 
 typedef struct
 {
@@ -266,7 +273,6 @@ typedef struct
     double xpos;
     double ypos;
 } State;
-
 
 typedef Vec2 (*parametricfn)(double);
 
@@ -310,10 +316,13 @@ void InitRenderGroup(RenderGroup *render_group)
 {
     memset(render_group, 0, sizeof(*render_group));
     render_group->iMax     = 500;
-    render_group->vMax     = 1000;
+    render_group->vMax     = 2000;
+    render_group->dMax     = 500; 
+
 
     render_group->Indices  = malloc(sizeof(*render_group->Indices) * render_group->iMax);
     render_group->Vertices = malloc(sizeof(*render_group->Vertices) * render_group->vMax);
+    render_group->Discontinuity = malloc(sizeof(*render_group->Discontinuity) * render_group->dMax);
 }
 
 void AddSingleVertex(RenderGroup *render_group, Vec2 vertex)
@@ -327,9 +336,28 @@ void RenderRenderGroup(RenderGroup *render_group, unsigned int program, bool sho
     glUniform3f(glGetUniformLocation(program, "inColor"), 0.0f, 1.0f, 0.0f);
     glLineWidth(5);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(*render_group->Vertices) * render_group->vCount, render_group->Vertices);
-    glDrawArrays(GL_LINE_STRIP, 0, render_group->vCount);
 
-    // #if render vertices too then, 
+    // Plot everything in the way 
+    // glDrawArrays(GL_LINE_STRIP, 0, render_group->vCount);
+
+    // We going for multiple rendering calls .. more work on GPU side
+
+    int discontinuous = 0; 
+    for (int i = 0; i < (int32_t)render_group->dCount-1; ++i)
+    {
+        glDrawArrays(GL_LINE_STRIP, discontinuous, render_group->Discontinuity[i] - discontinuous);
+        discontinuous = render_group->Discontinuity[i] + 1;
+        if (discontinuous == render_group->Discontinuity[i + 1])
+            ++i;
+    }
+
+    //// Pick up from the last discontinuity and continue the graph from there 
+    if (render_group->dCount)
+        glDrawArrays(GL_LINE_STRIP, render_group->Discontinuity[render_group->dCount - 1] + 1,
+                     render_group->vCount - (render_group->Discontinuity[render_group->dCount - 1] + 1));
+    else
+        glDrawArrays(GL_LINE_STRIP,0, render_group->vCount);
+    // #if render vertices too then,
     if (showPoints)
     {
         glUniform3f(glGetUniformLocation(program, "inColor"), 1.0f, 0.0f, 0.0f);
@@ -343,22 +371,41 @@ void ResetRenderGroup(RenderGroup *render_group)
 {
     render_group->iCount = 0;
     render_group->vCount = 0;
+    render_group->dCount = 0;
 }
 
 void PlotGraph(RenderGroup *render_group, trigfn func, Graph *graph)
 {
-    Vec2 vec;
-    //for (float x = -3.141592f * 2; x < 3.141592f * 2; x += 0.2f)
+    Vec2 vec1, vec2;
+    // for (float x = -3.141592f * 2; x < 3.141592f * 2; x += 0.2f)
     //{
     //    vec.x = graph->center.x + x * graph->scale.x;
     //    vec.y = graph->center.y + func(x) * graph->scale.y;
     //    AddSingleVertex(render_group, vec);
     //}
-    for (float x = -5.0f; x <= 5.0f; x+=1.0f)
+    float step = 0.02f;
+    float init = -20.0f;
+    float term = 20.0f;
+
+    vec1.x     = graph->center.x + init * graph->scale.x;
+    vec1.y     = graph->center.y + func(init) * graph->scale.y;
+
+    for (float x = init; x <= term; x += step)
     {
-        vec.x = graph->center.x + x * graph->scale.x; 
-        vec.y = graph->center.y + func(x) * graph->scale.y; 
-        AddSingleVertex(render_group, vec);
+        // Check for discontinuity of the function
+        vec2.x = graph->center.x + (x+step) * graph->scale.x; 
+        vec2.y = graph->center.y + func(x+step) * graph->scale.y; 
+
+        AddSingleVertex(render_group, vec1);
+        float slope = atan(fabs((vec2.y - vec1.y) / (vec2.x - vec1.x)));
+        if ( slope > 1.57f)
+        {
+            // mark current point as discontinuity 
+            assert(render_group->dCount < render_group->dMax);
+            render_group->Discontinuity[render_group->dCount++] = render_group->vCount;
+            // fprintf(stderr, "Point of discontinuity for inverse function is at %f.\n", slope);
+        }
+        vec1 = vec2; 
     }
 }
 
@@ -402,7 +449,7 @@ int  main(int argc, char **argv)
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBindVertexArray(vao);
 
-    glBufferData(GL_ARRAY_BUFFER, 1000 * 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 2000 * 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
     // glBufferData(GL_ARRAY_BUFFER, sizeof(vertexes), vertexes, GL_DYNAMIC_DRAW);
 
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
@@ -420,12 +467,12 @@ int  main(int argc, char **argv)
 
     Mat4 scene_matrix = IdentityMatrix();
     // update the ortho matrix when the frame changes
-    Mat4 ortho_matrix = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
+    Mat4  ortho_matrix = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
 
     Graph graphs;
     InitGraph(&graphs);
 
-    UserData data         = {.OrthoMatrix = &ortho_matrix, .graph = &graphs};
+    UserData data = {.OrthoMatrix = &ortho_matrix, .graph = &graphs};
     glfwSetWindowUserPointer(window, &data);
     // PlotGraph(&graph, tan, &graphs);
     // PlotGraph(&graph, cos,&graphs);
@@ -441,7 +488,7 @@ int  main(int argc, char **argv)
         ResetRenderGroup(&graph);
         // PlotParametric(&graph, RoseCurves, &graphs);
         // PlotGraph(&graph, exp, &graphs);
-        PlotGraph(&graph, lin, &graphs);
+        PlotGraph(&graph, discont, &graphs);
         RenderGraph(&graphs);
         glUseProgram(program);
 
@@ -458,7 +505,7 @@ int  main(int argc, char **argv)
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-        RenderRenderGroup(&graph, program,false);
+        RenderRenderGroup(&graph, program, false);
         glBindVertexArray(0);
         HandleEvents(window, &panner, &graphs);
         glfwSwapBuffers(window);
@@ -489,7 +536,7 @@ void HandleEvents(GLFWwindow *window, State *state, Graph *graph)
             double delY = ypos - state->ypos;
             graph->center.x += delX;
             graph->center.y -= delY;
-            state->xpos = xpos; 
+            state->xpos = xpos;
             state->ypos = ypos;
         }
         break;
@@ -497,6 +544,6 @@ void HandleEvents(GLFWwindow *window, State *state, Graph *graph)
             TriggerBreakpoint();
         }
     }
-    else 
-        state->bPressed = false; 
+    else
+        state->bPressed = false;
 }
