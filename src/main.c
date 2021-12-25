@@ -13,10 +13,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+// TODO :: Automatic rescaling of axes -> Partially done 
+// TODO :: Place co-ordinate values on the axes
+// TODO :: Allow customization
+// TODO :: Load font library and label the axes 
+// Make UI appealing 
+
+// TODO Later : Add terminal and a parser 
+
 #define TriggerBreakpoint()                                                                                            \
     {                                                                                                                  \
         printf("Abort called at func -> %s, line ->  %d.", __func__, __LINE__);                                        \
-        abort();                                                                                                      \
+        abort();                                                                                                       \
     }
 
 typedef double (*trigfn)(double);
@@ -36,9 +44,9 @@ double lin(double x)
     return x;
 }
 
-double discont(double x) 
+double discont(double x)
 {
-    return 1 / (x * x - 1); 
+    return 1 / (x * x - 1);
 }
 
 #define no_default_case() __assume(0)
@@ -59,6 +67,9 @@ typedef struct Vec3
     float z;
 } Vec3;
 
+#define MAJOR_SCALE 200
+#define MINOR_SCALE 100
+
 typedef struct
 {
     unsigned int vao;
@@ -68,6 +79,9 @@ typedef struct
 
     Vec2         center;
     Vec2         scale;
+
+    Vec2         main_scale; // Controls the major scaling on the axes of the graph
+    Vec2         mini_scale; // Controls the minor scaling on the axes of the graph
 } Graph;
 
 typedef struct
@@ -117,17 +131,30 @@ void key_callback(GLFWwindow *window, int key, int scancode, int mod, int action
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
     // a suitable scaling value for scrolling
-    const float scale = 5.0f;
-    UserData *  data  = glfwGetWindowUserPointer(window);
-    Graph *     graph = data->graph;
-    graph->scale.y -= scale * yoffset;
-    graph->scale.x -= scale * yoffset;
+    const float origin = 200.0f;
+    const float scale  = 5.0f;
+    UserData *  data   = glfwGetWindowUserPointer(window);
+    Graph *     graph  = data->graph;
+
+    graph->main_scale.y += scale * yoffset;
+    graph->main_scale.x += scale * yoffset;
+
     if (graph->scale.y <= 0)
         graph->scale.y = 1;
     if (graph->scale.x <= 0)
         graph->scale.x = 1;
-    if (xoffset)
-        fprintf(stderr, "X offset scroll callbacked is : %lf.", xoffset);
+
+    // if scale in both x and y direction reaches certain threshold, reset the values to its original and scale the
+    // graph scale accordingly
+    if (graph->main_scale.x < 50.0f || graph->main_scale.x > 400.0f) 
+    {
+        // This changes scaling which controls the point of the label we will be plotting
+        graph->scale.x = graph->scale.x * origin / graph->main_scale.x;
+        graph->scale.y = graph->scale.y * origin / graph->main_scale.y;
+
+        // We should be resetting something here, but what to reset exactly?
+        graph->main_scale = (Vec2){origin, origin};
+    }
 }
 
 unsigned int LoadProgram(Shader vertex, Shader fragment)
@@ -297,7 +324,11 @@ void InitGraph(Graph *graph)
     graph->program  = LoadProgram(vertex, fragment);
 
     graph->center   = (Vec2){400.0f, 400.0f};
-    graph->scale    = (Vec2){100.0f, 100.0f};
+
+    // Make graph->scale use value instead of pixel scale
+    graph->scale      = (Vec2){1.0f, 1.0f};
+
+    graph->main_scale = (Vec2){200.0f, 200.0f};
 }
 
 void RenderGraph(Graph *graph)
@@ -306,7 +337,7 @@ void RenderGraph(Graph *graph)
     glBindVertexArray(graph->vao);
     glUniform1i(glGetUniformLocation(graph->program, "grid_width"), 0);
     glUniform2f(glGetUniformLocation(graph->program, "center"), graph->center.x, graph->center.y);
-    glUniform2f(glGetUniformLocation(graph->program, "scale"), graph->scale.x, graph->scale.y);
+    glUniform2f(glGetUniformLocation(graph->program, "scale"), graph->main_scale.x, graph->main_scale.y);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glUseProgram(0);
     glBindVertexArray(0);
@@ -315,13 +346,12 @@ void RenderGraph(Graph *graph)
 void InitRenderGroup(RenderGroup *render_group)
 {
     memset(render_group, 0, sizeof(*render_group));
-    render_group->iMax     = 500;
-    render_group->vMax     = 2000;
-    render_group->dMax     = 500; 
+    render_group->iMax          = 500;
+    render_group->vMax          = 2000;
+    render_group->dMax          = 500;
 
-
-    render_group->Indices  = malloc(sizeof(*render_group->Indices) * render_group->iMax);
-    render_group->Vertices = malloc(sizeof(*render_group->Vertices) * render_group->vMax);
+    render_group->Indices       = malloc(sizeof(*render_group->Indices) * render_group->iMax);
+    render_group->Vertices      = malloc(sizeof(*render_group->Vertices) * render_group->vMax);
     render_group->Discontinuity = malloc(sizeof(*render_group->Discontinuity) * render_group->dMax);
 }
 
@@ -333,17 +363,17 @@ void AddSingleVertex(RenderGroup *render_group, Vec2 vertex)
 
 void RenderRenderGroup(RenderGroup *render_group, unsigned int program, bool showPoints)
 {
-    glUniform3f(glGetUniformLocation(program, "inColor"), 0.0f, 1.0f, 0.0f);
-    glLineWidth(5);
+    glUniform3f(glGetUniformLocation(program, "inColor"), 0.0f, 0.0f, 1.0f);
+    glLineWidth(3);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(*render_group->Vertices) * render_group->vCount, render_group->Vertices);
 
-    // Plot everything in the way 
+    // Plot everything in the way
     // glDrawArrays(GL_LINE_STRIP, 0, render_group->vCount);
 
     // We going for multiple rendering calls .. more work on GPU side
 
-    int discontinuous = 0; 
-    for (int i = 0; i < (int32_t)render_group->dCount-1; ++i)
+    int discontinuous = 0;
+    for (int i = 0; i < (int32_t)render_group->dCount - 1; ++i)
     {
         glDrawArrays(GL_LINE_STRIP, discontinuous, render_group->Discontinuity[i] - discontinuous);
         discontinuous = render_group->Discontinuity[i] + 1;
@@ -351,12 +381,12 @@ void RenderRenderGroup(RenderGroup *render_group, unsigned int program, bool sho
             ++i;
     }
 
-    //// Pick up from the last discontinuity and continue the graph from there 
+    //// Pick up from the last discontinuity and continue the graph from there
     if (render_group->dCount)
         glDrawArrays(GL_LINE_STRIP, render_group->Discontinuity[render_group->dCount - 1] + 1,
                      render_group->vCount - (render_group->Discontinuity[render_group->dCount - 1] + 1));
     else
-        glDrawArrays(GL_LINE_STRIP,0, render_group->vCount);
+        glDrawArrays(GL_LINE_STRIP, 0, render_group->vCount);
     // #if render vertices too then,
     if (showPoints)
     {
@@ -387,25 +417,25 @@ void PlotGraph(RenderGroup *render_group, trigfn func, Graph *graph)
     float init = -20.0f;
     float term = 20.0f;
 
-    vec1.x     = graph->center.x + init * graph->scale.x;
-    vec1.y     = graph->center.y + func(init) * graph->scale.y;
+    vec1.x     = graph->center.x + init * graph->main_scale.x / (graph->scale.x);
+    vec1.y     = graph->center.y + func(init) * graph->main_scale.y / (graph->scale.y);
 
     for (float x = init; x <= term; x += step)
     {
         // Check for discontinuity of the function
-        vec2.x = graph->center.x + (x+step) * graph->scale.x; 
-        vec2.y = graph->center.y + func(x+step) * graph->scale.y; 
+        vec2.x = graph->center.x + (x + step) * graph->main_scale.x / (graph->scale.x);
+        vec2.y = graph->center.y + func(x + step) * graph->main_scale.y / (graph->scale.y);
 
         AddSingleVertex(render_group, vec1);
         float slope = atan(fabs((vec2.y - vec1.y) / (vec2.x - vec1.x)));
-        if ( slope > 1.57f)
+        if (slope > 1.57f)
         {
-            // mark current point as discontinuity 
+            // mark current point as discontinuity
             assert(render_group->dCount < render_group->dMax);
             render_group->Discontinuity[render_group->dCount++] = render_group->vCount;
             // fprintf(stderr, "Point of discontinuity for inverse function is at %f.\n", slope);
         }
-        vec1 = vec2; 
+        vec1 = vec2;
     }
 }
 
