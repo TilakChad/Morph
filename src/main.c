@@ -3,6 +3,8 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "../include/stb_truetype.h"
 #include "../maths/matrix.h"
 
 #include <assert.h>
@@ -13,13 +15,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-// TODO :: Automatic rescaling of axes -> Partially done 
-// TODO :: Place co-ordinate values on the axes
+// TODO :: Place co-ordinate values on the axes -> Loading fonts -> Font loaded -> Almost done 
+// TODO :: Scaling around point
+// TODO :: Labels shown at bottom or left if origin isn't within the frame 
+// TODO :: Minimize floating point errors 
 // TODO :: Allow customization
-// TODO :: Load font library and label the axes 
-// Make UI appealing 
+// TODO :: Allow multiple graphs be drawn on the same window
+// TODO :: Load font library and label the axes -> Done 
+// Make UI appealing -> Partially done
 
-// TODO Later : Add terminal and a parser 
+// TODO Later : Add terminal and a parser
 
 #define TriggerBreakpoint()                                                                                            \
     {                                                                                                                  \
@@ -32,6 +37,11 @@ typedef double (*trigfn)(double);
 double GaussianIntegral(double x)
 {
     return 4 * exp(-x * x / 2);
+}
+
+double parabola(double x)
+{
+    return x * x;
 }
 
 double inv(double x)
@@ -76,11 +86,12 @@ typedef struct
     unsigned int vbo;
     unsigned int program;
     float        width;
+    float        value;
 
     Vec2         center;
     Vec2         scale;
 
-    Vec2         main_scale; // Controls the major scaling on the axes of the graph
+    Vec2         slide_scale; // Controls the major scaling on the axes of the graph
     Vec2         mini_scale; // Controls the minor scaling on the axes of the graph
 } Graph;
 
@@ -95,6 +106,8 @@ typedef struct
     char * data;
     size_t length;
 } String;
+
+#define MakeString(str) (String){.data = str, .length = strlen(str)};
 
 typedef enum
 {
@@ -133,11 +146,14 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     // a suitable scaling value for scrolling
     const float origin = 200.0f;
     const float scale  = 5.0f;
+
     UserData *  data   = glfwGetWindowUserPointer(window);
     Graph *     graph  = data->graph;
 
-    graph->main_scale.y += scale * yoffset;
-    graph->main_scale.x += scale * yoffset;
+    float       off = scale * yoffset;
+
+    graph->slide_scale.y += off;
+    graph->slide_scale.x += off;
 
     if (graph->scale.y <= 0)
         graph->scale.y = 1;
@@ -146,14 +162,23 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 
     // if scale in both x and y direction reaches certain threshold, reset the values to its original and scale the
     // graph scale accordingly
-    if (graph->main_scale.x < 50.0f || graph->main_scale.x > 400.0f) 
+    if (graph->slide_scale.x < 100.0f || graph->slide_scale.x > 400.0f)
     {
+        if (graph->slide_scale.x < 100.0f)
+            graph->slide_scale.x = 100.0f;
+        if (graph->slide_scale.x > 400.0f)
+            graph->slide_scale.x = 400.0f;
+
         // This changes scaling which controls the point of the label we will be plotting
-        graph->scale.x = graph->scale.x * origin / graph->main_scale.x;
-        graph->scale.y = graph->scale.y * origin / graph->main_scale.y;
+        graph->scale.x = graph->scale.x * (origin / graph->slide_scale.x);
+        graph->scale.y = graph->scale.y * (origin / graph->slide_scale.x);
+
+        // Update the original scaling
+        // Once reset change the value accordingly
+        graph->value *= origin / graph->slide_scale.x;
 
         // We should be resetting something here, but what to reset exactly?
-        graph->main_scale = (Vec2){origin, origin};
+        graph->slide_scale = (Vec2){origin, origin};
     }
 }
 
@@ -249,6 +274,8 @@ GLFWwindow *LoadGLFW(int width, int height, const char *title)
     glfwWindowHint(GLFW_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+    glfwWindowHint(GLFW_SAMPLES, 4);
+
     if (!glfwInit())
     {
         fprintf(stderr, "Failed to load GLFW api\n");
@@ -292,6 +319,14 @@ typedef struct
     uint32_t *Indices;
     uint32_t *Discontinuity;
     Vec2 *    Vertices;
+
+    // Need support for font rendering here
+    uint32_t fCount; // This might seem inconsistent but whatever
+    // Each fCount will have 6 vertices with each vertex having 4 floats or 2 vec2's
+    Vec2 *fVertices;
+
+    // Now multiple plotting.. we need to setup break point somewhere
+    uint32_t graphbreak[10]; // returns indices to break at 
 } RenderGroup;
 
 typedef struct
@@ -327,8 +362,9 @@ void InitGraph(Graph *graph)
 
     // Make graph->scale use value instead of pixel scale
     graph->scale      = (Vec2){1.0f, 1.0f};
+    graph->value      = 1.0f;
 
-    graph->main_scale = (Vec2){200.0f, 200.0f};
+    graph->slide_scale = (Vec2){200.0f, 200.0f};
 }
 
 void RenderGraph(Graph *graph)
@@ -337,7 +373,7 @@ void RenderGraph(Graph *graph)
     glBindVertexArray(graph->vao);
     glUniform1i(glGetUniformLocation(graph->program, "grid_width"), 0);
     glUniform2f(glGetUniformLocation(graph->program, "center"), graph->center.x, graph->center.y);
-    glUniform2f(glGetUniformLocation(graph->program, "scale"), graph->main_scale.x, graph->main_scale.y);
+    glUniform2f(glGetUniformLocation(graph->program, "scale"), graph->slide_scale.x, graph->slide_scale.y);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glUseProgram(0);
     glBindVertexArray(0);
@@ -353,6 +389,9 @@ void InitRenderGroup(RenderGroup *render_group)
     render_group->Indices       = malloc(sizeof(*render_group->Indices) * render_group->iMax);
     render_group->Vertices      = malloc(sizeof(*render_group->Vertices) * render_group->vMax);
     render_group->Discontinuity = malloc(sizeof(*render_group->Discontinuity) * render_group->dMax);
+
+    const int maxFontVertices   = 10000; // will render 500/6 fonts only
+    render_group->fVertices     = malloc(sizeof(*render_group->fVertices) * maxFontVertices);
 }
 
 void AddSingleVertex(RenderGroup *render_group, Vec2 vertex)
@@ -364,7 +403,7 @@ void AddSingleVertex(RenderGroup *render_group, Vec2 vertex)
 void RenderRenderGroup(RenderGroup *render_group, unsigned int program, bool showPoints)
 {
     glUniform3f(glGetUniformLocation(program, "inColor"), 0.0f, 0.0f, 1.0f);
-    glLineWidth(3);
+    glLineWidth(4);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(*render_group->Vertices) * render_group->vCount, render_group->Vertices);
 
     // Plot everything in the way
@@ -377,8 +416,6 @@ void RenderRenderGroup(RenderGroup *render_group, unsigned int program, bool sho
     {
         glDrawArrays(GL_LINE_STRIP, discontinuous, render_group->Discontinuity[i] - discontinuous);
         discontinuous = render_group->Discontinuity[i] + 1;
-        if (discontinuous == render_group->Discontinuity[i + 1])
-            ++i;
     }
 
     //// Pick up from the last discontinuity and continue the graph from there
@@ -387,7 +424,7 @@ void RenderRenderGroup(RenderGroup *render_group, unsigned int program, bool sho
                      render_group->vCount - (render_group->Discontinuity[render_group->dCount - 1] + 1));
     else
         glDrawArrays(GL_LINE_STRIP, 0, render_group->vCount);
-    // #if render vertices too then,
+
     if (showPoints)
     {
         glUniform3f(glGetUniformLocation(program, "inColor"), 1.0f, 0.0f, 0.0f);
@@ -402,6 +439,7 @@ void ResetRenderGroup(RenderGroup *render_group)
     render_group->iCount = 0;
     render_group->vCount = 0;
     render_group->dCount = 0;
+    render_group->fCount = 0;
 }
 
 void PlotGraph(RenderGroup *render_group, trigfn func, Graph *graph)
@@ -417,14 +455,14 @@ void PlotGraph(RenderGroup *render_group, trigfn func, Graph *graph)
     float init = -20.0f;
     float term = 20.0f;
 
-    vec1.x     = graph->center.x + init * graph->main_scale.x / (graph->scale.x);
-    vec1.y     = graph->center.y + func(init) * graph->main_scale.y / (graph->scale.y);
+    vec1.x     = graph->center.x + init * graph->slide_scale.x / (graph->scale.x);
+    vec1.y     = graph->center.y + func(init) * graph->slide_scale.y / (graph->scale.y);
 
     for (float x = init; x <= term; x += step)
     {
         // Check for discontinuity of the function
-        vec2.x = graph->center.x + (x + step) * graph->main_scale.x / (graph->scale.x);
-        vec2.y = graph->center.y + func(x + step) * graph->main_scale.y / (graph->scale.y);
+        vec2.x = graph->center.x + (x + step) * graph->slide_scale.x / (graph->scale.x);
+        vec2.y = graph->center.y + func(x + step) * graph->slide_scale.y / (graph->scale.y);
 
         AddSingleVertex(render_group, vec1);
         float slope = atan(fabs((vec2.y - vec1.y) / (vec2.x - vec1.x)));
@@ -463,7 +501,218 @@ void PlotParametric(RenderGroup *render_group, parametricfn func, Graph *graph)
 
 void HandleEvents(GLFWwindow *window, State *state, Graph *graph);
 
-int  main(int argc, char **argv)
+typedef struct Glyph
+{
+    Vec2 offset;
+    Vec2 size;
+    Vec2 bearing;
+    int  Advance;
+} Glyph;
+
+typedef struct Font
+{
+    unsigned int font_texture;
+    unsigned int vao;
+    unsigned int vbo;
+    float        rasterScale;
+    int          width;
+    int          height;
+    char         font_buffer[512];
+    String       font_name;
+    Glyph        character[128]; // For first 128 printable characters only
+} Font;
+
+void LoadFont(Font *font, const char *font_dir)
+{
+    memset(font, 0, sizeof(*font));
+    stbtt_fontinfo sfont;
+    String         fontbuffer = ReadFile(font_dir);
+    stbtt_InitFont(&sfont, fontbuffer.data, 0);
+
+    // Load the character's data from stb_truetype
+    float fontSize = 35;
+    float scale    = stbtt_ScaleForPixelHeight(&sfont, fontSize);
+    int   ascent, descent, baseline;
+    stbtt_GetFontVMetrics(&sfont, &ascent, &descent, 0);
+    baseline = (int)(ascent * scale);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    font->rasterScale = scale;
+
+    int height        = (int)((ascent - descent) * scale);
+    int width         = 0;
+
+    font->height      = height;
+
+    for (int ch = 0; ch < 128; ++ch)
+    {
+        int advance, lsb; // left side bearing
+        stbtt_GetCodepointHMetrics(&sfont, ch, &advance, &lsb);
+        width += advance;
+    }
+    width = width * scale;
+
+    // Text Rendering starts here
+    unsigned char *bmpbuffers = malloc((size_t)width * height);
+    memset(bmpbuffers, 0, width * height);
+
+    float xpos  = 0.0f;
+    int   above = ascent * scale;
+
+    for (int ch = 0; ch < 128; ++ch)
+    {
+        int   advance, lsb, x0, y0, x1, y1;
+        float x_shift = xpos - (float)(floor(xpos));
+        stbtt_GetCodepointHMetrics(&sfont, ch, &advance, &lsb);
+        stbtt_GetCodepointBitmapBoxSubpixel(&sfont, ch, scale, scale, x_shift, 0, &x0, &y0, &x1, &y1);
+
+        // auto stride = ((int)xpos + x0) + width * (above + y0); //  * (baseline + y0) + (int)xpos + x0;
+        int stride = (int)xpos + x0 + width * (baseline + y0);
+
+        stbtt_MakeCodepointBitmapSubpixel(&sfont, bmpbuffers + stride, x1 - x0, y1 - y0, width, scale, scale, x_shift,
+                                          0, ch);
+
+        Glyph *glyph   = &font->character[ch];
+        glyph->offset  = (Vec2){(int)xpos, 0};
+        glyph->size    = (Vec2){x1 - x0, y1 - y0};
+        glyph->Advance = (int)(advance * scale);
+        xpos += advance * scale;
+    }
+
+    glGenTextures(1, &font->font_texture);
+    glBindTexture(GL_TEXTURE_2D, font->font_texture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Load texture into OpenGL memory
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, bmpbuffers);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glGenVertexArrays(1, &font->vao);
+    glGenBuffers(1, &font->vbo);
+
+    glBindVertexArray(font->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, font->vbo);
+
+    const float max_font_limit = 1000 * 50;
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * max_font_limit, NULL, GL_DYNAMIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), NULL);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    font->width = width;
+    // Allocate size for temporary numbers to string conversion
+}
+
+// position in pixel where (0,0) is the lower left corner of the screen
+void FillText(RenderGroup *render_group, Font *font, Vec2 position, String str, int scale)
+{
+    // its quite straightforward
+    int32_t x = position.x;
+    int32_t y = position.y;
+
+    float    tex0, tex1;
+    
+    for (uint32_t i = 0; i < str.length; ++i)
+    {
+        int   count = render_group->fCount;
+        Glyph glyph = font->character[(size_t)str.data[i]];
+        int   w     = glyph.Advance;
+        int   h     = font->height;
+
+        tex0        = glyph.offset.x / font->width;
+        tex1        = (glyph.offset.x + w) / font->width;
+        // lower left corner
+        render_group->fVertices[count * 12 + 0] = (Vec2){x, y};
+        render_group->fVertices[count * 12 + 1] = (Vec2){tex0, 1.0f};
+        // upper left corner
+        render_group->fVertices[count * 12 + 2] = (Vec2){x, y + h};
+        render_group->fVertices[count * 12 + 3] = (Vec2){tex0, 0.0f};
+        // upper right corner
+        render_group->fVertices[count * 12 + 4] = (Vec2){x + w, y + h};
+        render_group->fVertices[count * 12 + 5] = (Vec2){tex1, 0.0f};
+        // lower left corner
+        render_group->fVertices[count * 12 + 6] = (Vec2){x + w, y};
+        render_group->fVertices[count * 12 + 7] = (Vec2){tex1, 1.0f};
+        // duplicate lower left and upper right
+        // upper right corner
+        render_group->fVertices[count * 12 + 8] = (Vec2){x + w, y + h};
+        render_group->fVertices[count * 12 + 9] = (Vec2){tex1, 0.0f};
+        // lower left corner
+        render_group->fVertices[count * 12 + 10] = (Vec2){x, y};
+        render_group->fVertices[count * 12 + 11] = (Vec2){tex0, 1.0f};
+
+        x                                        = x + glyph.Advance;
+        render_group->fCount += 1;
+    }
+}
+
+void RenderFont(RenderGroup *render_group, Font *font, unsigned int program)
+{
+    glUseProgram(program);
+    glBindVertexArray(font->vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, font->vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, render_group->fCount * 12 * sizeof(Vec2), render_group->fVertices);
+    glDrawArrays(GL_TRIANGLES, 0, render_group->fCount * 6);
+    glBindVertexArray(0);
+    glUseProgram(0);
+
+    // for (int i = 0; i < render_group->fCount*12; ++i)
+    //{
+    //    fprintf(stderr, "\nx and y are : %f %f.", render_group->fVertices[i].x, render_group->fVertices[i].y);
+    //}
+    // fprintf(stderr, "\n\n");
+}
+
+void RenderLabels(RenderGroup *render_group, Font *font, Graph *graph, Mat4 *orthoMatrix)
+{
+    // first find the center of the graph and put numbers around here adn there
+    // Let's try labeling x-axis
+    // calculate the spacing of the major points first
+    Vec2 origin = graph->center;
+    Vec2 position;
+    // first horizontal line is at : pixel scaling of x axis first, then scale value
+    // plot across whole label
+
+    for (int i = -15; i <= 15; ++i)
+    {
+        position.x = origin.x + i * graph->slide_scale.x/2 - font->height / 2;
+        position.y = origin.y - font->height;
+        // Now calculate the value at the position
+
+        float val   = i * graph->scale.x/2;
+        int   count = snprintf(NULL, 0, "%3g", val);
+        snprintf(font->font_buffer, count + 1, "%3g", val);
+        String str = {.data = font->font_buffer, .length = count};
+        FillText(render_group, font, position, str, 0);
+    }
+    for (int y = -15; y <= 15; ++y)
+    {
+        if (y == 0)
+            continue;
+        position.x = origin.x - font->height * 1.5f;
+        position.y = origin.y + y * graph->slide_scale.y/2 - font->height / 2;
+        // Now calculate the value at the position
+
+        float val   = y * graph->scale.y/2;
+        int   count = snprintf(NULL, 0, "%3g", val);
+        snprintf(font->font_buffer, count + 1, "%3g", val);
+        String str = {.data = font->font_buffer, .length = count};
+        FillText(render_group, font, position, str, 0);
+    }
+}
+
+int main(int argc, char **argv)
 {
     GLFWwindow * window   = LoadGLFW(screen_width, screen_height, "Graph FFI");
 
@@ -510,16 +759,33 @@ int  main(int argc, char **argv)
     PlotParametric(&graph, RoseCurves, &graphs);
     State panner = {0};
 
+    // Font shaders and program
+    Shader       font_vertex   = LoadShader("./include/text_vertex.glsl", VERTEX_SHADER);
+    Shader       font_fragment = LoadShader("./include/text_fragment.glsl", FRAGMENT_SHADER);
+    unsigned int fProgram      = LoadProgram(font_vertex, font_fragment);
+
+    Font         ComicSans;
+    LoadFont(&ComicSans, "./include/comic.ttf");
+
+    // String str = MakeString("Hello this is from graphing calculator that rivals geogebra calc");
+    String str = MakeString("@ComicSans");
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glEnable(GL_MULTISAMPLE);
+
     while (!glfwWindowShouldClose(window))
     {
         scene_matrix = IdentityMatrix();
         glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ResetRenderGroup(&graph);
-        // PlotParametric(&graph, RoseCurves, &graphs);
-        // PlotGraph(&graph, exp, &graphs);
-        PlotGraph(&graph, discont, &graphs);
+        FillText(&graph, &ComicSans, (Vec2){50.0f, 50.0f}, str, 0);
+        //// PlotParametric(&graph, RoseCurves, &graphs);
+        //// PlotGraph(&graph, exp, &graphs);
+        PlotGraph(&graph, inv, &graphs);
         RenderGraph(&graphs);
+        RenderLabels(&graph, &ComicSans, &graphs, &scene_matrix);
         glUseProgram(program);
 
         // Mat4 translation = TranslationMatrix(0.0f, 0.0f, 0.0f);
@@ -536,7 +802,12 @@ int  main(int argc, char **argv)
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
         RenderRenderGroup(&graph, program, false);
-        glBindVertexArray(0);
+        glUseProgram(fProgram);
+        glUniformMatrix4fv(glGetUniformLocation(fProgram, "scene"), 1, GL_TRUE, &ortho_matrix.elem[0][0]);
+        glBindTexture(GL_TEXTURE_2D, ComicSans.font_texture);
+        RenderFont(&graph, &ComicSans, fProgram);
+
+        // glBindVertexArray(0);
         HandleEvents(window, &panner, &graphs);
         glfwSwapBuffers(window);
         glfwPollEvents();
