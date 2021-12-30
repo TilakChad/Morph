@@ -92,7 +92,6 @@ typedef struct
     Vec2         scale;
 
     Vec2         slide_scale; // Controls the major scaling on the axes of the graph
-    Vec2         mini_scale; // Controls the minor scaling on the axes of the graph
 } Graph;
 
 typedef struct
@@ -176,8 +175,6 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
         // Update the original scaling
         // Once reset change the value accordingly
         graph->value *= origin / graph->slide_scale.x;
-
-        // We should be resetting something here, but what to reset exactly?
         graph->slide_scale = (Vec2){origin, origin};
     }
 }
@@ -274,7 +271,7 @@ GLFWwindow *LoadGLFW(int width, int height, const char *title)
     glfwWindowHint(GLFW_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    glfwWindowHint(GLFW_SAMPLES, 4);
+    // glfwWindowHint(GLFW_SAMPLES, 4);
 
     if (!glfwInit())
     {
@@ -326,7 +323,10 @@ typedef struct
     Vec2 *fVertices;
 
     // Now multiple plotting.. we need to setup break point somewhere
-    uint32_t graphbreak[10]; // returns indices to break at 
+    uint32_t graphbreak[10]; // returns indices to break at
+    uint32_t graphcount;
+    Vec3     graphcolor[10];
+    const char *graphname[10];
 } RenderGroup;
 
 typedef struct
@@ -383,7 +383,7 @@ void InitRenderGroup(RenderGroup *render_group)
 {
     memset(render_group, 0, sizeof(*render_group));
     render_group->iMax          = 500;
-    render_group->vMax          = 2000;
+    render_group->vMax          = 5000;
     render_group->dMax          = 500;
 
     render_group->Indices       = malloc(sizeof(*render_group->Indices) * render_group->iMax);
@@ -402,7 +402,6 @@ void AddSingleVertex(RenderGroup *render_group, Vec2 vertex)
 
 void RenderRenderGroup(RenderGroup *render_group, unsigned int program, bool showPoints)
 {
-    glUniform3f(glGetUniformLocation(program, "inColor"), 0.0f, 0.0f, 1.0f);
     glLineWidth(4);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(*render_group->Vertices) * render_group->vCount, render_group->Vertices);
 
@@ -410,26 +409,37 @@ void RenderRenderGroup(RenderGroup *render_group, unsigned int program, bool sho
     // glDrawArrays(GL_LINE_STRIP, 0, render_group->vCount);
 
     // We going for multiple rendering calls .. more work on GPU side
-
-    int discontinuous = 0;
-    for (int i = 0; i < (int32_t)render_group->dCount - 1; ++i)
+    int vertices = 0;
+    for (int graph_c = 0; graph_c < render_group->graphcount; ++graph_c)
     {
-        glDrawArrays(GL_LINE_STRIP, discontinuous, render_group->Discontinuity[i] - discontinuous);
-        discontinuous = render_group->Discontinuity[i] + 1;
-    }
+        Vec3 inColor = render_group->graphcolor[graph_c];
+        glUniform3f(glGetUniformLocation(program, "inColor"), inColor.x, inColor.y, inColor.z);
+        int discontinuous = 0;
+        for (int i = vertices; i < (int32_t)render_group->dCount - 1; ++i)
+        {
+            glDrawArrays(GL_LINE_STRIP, discontinuous, render_group->Discontinuity[i] - discontinuous);
+            discontinuous = render_group->Discontinuity[i] + 1;
+            if (graph_c < render_group->graphcount - 1) 
+            {
+                if (discontinuous >= render_group->graphbreak[render_group->graphcount + 1])
+                    break; 
+            }
+        }
 
-    //// Pick up from the last discontinuity and continue the graph from there
-    if (render_group->dCount)
-        glDrawArrays(GL_LINE_STRIP, render_group->Discontinuity[render_group->dCount - 1] + 1,
-                     render_group->vCount - (render_group->Discontinuity[render_group->dCount - 1] + 1));
-    else
-        glDrawArrays(GL_LINE_STRIP, 0, render_group->vCount);
+        //// Pick up from the last discontinuity and continue the graph from there
+        if (render_group->dCount)
+            glDrawArrays(GL_LINE_STRIP, render_group->Discontinuity[render_group->dCount - 1] + 1,
+                         render_group->vCount - (render_group->Discontinuity[render_group->dCount - 1] + 1));
+        else
+            glDrawArrays(GL_LINE_STRIP, vertices, render_group->graphbreak[graph_c]-vertices);
 
-    if (showPoints)
-    {
-        glUniform3f(glGetUniformLocation(program, "inColor"), 1.0f, 0.0f, 0.0f);
-        glPointSize(10);
-        glDrawArrays(GL_POINTS, 0, render_group->vCount);
+        if (showPoints)
+        {
+            glUniform3f(glGetUniformLocation(program, "inColor"), 1.0f, 0.0f, 0.0f);
+            glPointSize(10);
+            glDrawArrays(GL_POINTS, vertices, render_group->vCount);
+        }
+        vertices = render_group->graphbreak[graph_c];
     }
 }
 
@@ -440,20 +450,16 @@ void ResetRenderGroup(RenderGroup *render_group)
     render_group->vCount = 0;
     render_group->dCount = 0;
     render_group->fCount = 0;
+    render_group->graphcount = 0;
 }
 
-void PlotGraph(RenderGroup *render_group, trigfn func, Graph *graph)
+void PlotGraph(RenderGroup *render_group, trigfn func, Graph *graph, Vec3 color, const char* legend)
 {
     Vec2 vec1, vec2;
-    // for (float x = -3.141592f * 2; x < 3.141592f * 2; x += 0.2f)
-    //{
-    //    vec.x = graph->center.x + x * graph->scale.x;
-    //    vec.y = graph->center.y + func(x) * graph->scale.y;
-    //    AddSingleVertex(render_group, vec);
-    //}
+
     float step = 0.02f;
-    float init = -20.0f;
-    float term = 20.0f;
+    float init = -10.0f;
+    float term = 10.0f;
 
     vec1.x     = graph->center.x + init * graph->slide_scale.x / (graph->scale.x);
     vec1.y     = graph->center.y + func(init) * graph->slide_scale.y / (graph->scale.y);
@@ -475,6 +481,11 @@ void PlotGraph(RenderGroup *render_group, trigfn func, Graph *graph)
         }
         vec1 = vec2;
     }
+    // Add number of vertices in the current graph
+    assert(render_group->graphcount < 10);
+    render_group->graphbreak[render_group->graphcount++]   = render_group->vCount;
+    render_group->graphcolor[render_group->graphcount - 1] = color;
+    render_group->graphname[render_group->graphcount - 1]  = legend; // only static strings are expected as of yet 
 }
 
 Vec2 RoseCurves(double x)
@@ -610,7 +621,6 @@ void LoadFont(Font *font, const char *font_dir)
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     font->width = width;
-    // Allocate size for temporary numbers to string conversion
 }
 
 // position in pixel where (0,0) is the lower left corner of the screen
@@ -666,12 +676,6 @@ void RenderFont(RenderGroup *render_group, Font *font, unsigned int program)
     glDrawArrays(GL_TRIANGLES, 0, render_group->fCount * 6);
     glBindVertexArray(0);
     glUseProgram(0);
-
-    // for (int i = 0; i < render_group->fCount*12; ++i)
-    //{
-    //    fprintf(stderr, "\nx and y are : %f %f.", render_group->fVertices[i].x, render_group->fVertices[i].y);
-    //}
-    // fprintf(stderr, "\n\n");
 }
 
 void RenderLabels(RenderGroup *render_group, Font *font, Graph *graph, Mat4 *orthoMatrix)
@@ -679,10 +683,11 @@ void RenderLabels(RenderGroup *render_group, Font *font, Graph *graph, Mat4 *ort
     // first find the center of the graph and put numbers around here adn there
     // Let's try labeling x-axis
     // calculate the spacing of the major points first
+    // 
+    // TODO:: Make it dynamic 
+
     Vec2 origin = graph->center;
     Vec2 position;
-    // first horizontal line is at : pixel scaling of x axis first, then scale value
-    // plot across whole label
 
     for (int i = -15; i <= 15; ++i)
     {
@@ -712,6 +717,41 @@ void RenderLabels(RenderGroup *render_group, Font *font, Graph *graph, Mat4 *ort
     }
 }
 
+void DrawLegends(RenderGroup* render_group,Font* font,Graph* graph) // choose location automatically 
+{
+    // First draw a appropriate bounding box -> Easily handled by line strips 
+    // Draw a small rectangle filled with that color -> Might need a new pixel shader -> Used simple line instead
+    // Finally draw text with plot name -> Already available 
+    // Find the appropriate place to put the legend 
+    Vec2 pos = {0}; 
+    // Saturate these values somewhere
+    pos.x    = screen_width - 200; 
+    pos.y    = screen_height - font->height; 
+
+    int gcount = render_group->graphcount;
+    for (int label = 0; label < gcount; ++label)
+    {
+        // Add a line indicator with given color for legends 
+        AddSingleVertex(render_group, pos); 
+        AddSingleVertex(render_group, (Vec2){pos.x + 50, pos.y});
+        render_group->graphbreak[render_group->graphcount++]   = render_group->vCount;
+        render_group->graphcolor[render_group->graphcount - 1] = render_group->graphcolor[label];
+        FillText(render_group, font, (Vec2){pos.x + 75, pos.y - font->height/2},
+                 (String){.data = render_group->graphname[label], .length = strlen(render_group->graphname[label])}, 0);
+
+        pos.y -= font->height;
+    }
+
+    // Add a graph break for a small box around legends 
+    AddSingleVertex(render_group,(Vec2){pos.x-10,screen_height}); 
+    AddSingleVertex(render_group, (Vec2){pos.x-10,pos.y - 20});
+    AddSingleVertex(render_group, (Vec2){screen_width,pos.y - 20});
+
+    render_group->graphbreak[render_group->graphcount++]   = render_group->vCount;
+    render_group->graphcolor[render_group->graphcount - 1] = (Vec3){0.5f,0.5f,0.5f};
+    render_group->graphname[render_group->graphcount - 1]  = ""; // only static strings are expected as of yet
+}
+
 int main(int argc, char **argv)
 {
     GLFWwindow * window   = LoadGLFW(screen_width, screen_height, "Graph FFI");
@@ -728,7 +768,7 @@ int main(int argc, char **argv)
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBindVertexArray(vao);
 
-    glBufferData(GL_ARRAY_BUFFER, 2000 * 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 5000 * 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
     // glBufferData(GL_ARRAY_BUFFER, sizeof(vertexes), vertexes, GL_DYNAMIC_DRAW);
 
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
@@ -772,7 +812,9 @@ int main(int argc, char **argv)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    glEnable(GL_MULTISAMPLE);
+    // glEnable(GL_MULTISAMPLE);
+
+    // Mulitple discontinuous graphs aren't supported fully for now 
 
     while (!glfwWindowShouldClose(window))
     {
@@ -783,7 +825,10 @@ int main(int argc, char **argv)
         FillText(&graph, &ComicSans, (Vec2){50.0f, 50.0f}, str, 0);
         //// PlotParametric(&graph, RoseCurves, &graphs);
         //// PlotGraph(&graph, exp, &graphs);
-        PlotGraph(&graph, inv, &graphs);
+        // PlotGraph(&graph, inv, &graphs);
+        PlotGraph(&graph, sqrt, &graphs, (Vec3){0.0f, 0.0f, 1.0f}, "sqrt");
+        PlotGraph(&graph, GaussianIntegral, &graphs, (Vec3){0.0f, 1.0f, 0.0f}, "Gaussian");
+        PlotGraph(&graph, cos, &graphs, (Vec3){1.0f, 0.0f, 0.0f}, "cosine");
         RenderGraph(&graphs);
         RenderLabels(&graph, &ComicSans, &graphs, &scene_matrix);
         glUseProgram(program);
@@ -801,10 +846,12 @@ int main(int argc, char **argv)
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
+        DrawLegends(&graph, &ComicSans, &graphs);
         RenderRenderGroup(&graph, program, false);
         glUseProgram(fProgram);
         glUniformMatrix4fv(glGetUniformLocation(fProgram, "scene"), 1, GL_TRUE, &ortho_matrix.elem[0][0]);
         glBindTexture(GL_TEXTURE_2D, ComicSans.font_texture);
+
         RenderFont(&graph, &ComicSans, fProgram);
 
         // glBindVertexArray(0);
