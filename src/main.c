@@ -6,6 +6,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "../include/stb_truetype.h"
 #include "../maths/matrix.h"
+#include "../include/Graphy.h"
 
 #include <assert.h>
 #include <math.h>
@@ -77,10 +78,7 @@ typedef struct Vec3
     float z;
 } Vec3;
 
-#define MAJOR_SCALE 200
-#define MINOR_SCALE 100
-
-typedef struct
+struct Graph
 {
     unsigned int vao;
     unsigned int vbo;
@@ -92,7 +90,7 @@ typedef struct
     Vec2         scale;
 
     Vec2         slide_scale; // Controls the major scaling on the axes of the graph
-} Graph;
+};
 
 typedef struct
 {
@@ -122,7 +120,7 @@ typedef struct
 
 void ErrorCallback(int code, const char *description)
 {
-    fprintf(stderr, "Error is %s.", description);
+    fprintf(stderr, "\nGLFW Error -> %s.\n", description);
 }
 
 void FrameChangeCallback(GLFWwindow *window, int width, int height)
@@ -151,7 +149,7 @@ float MagicNumberGenerator(int n)
     return non_neg ? (n * n + 1) * val : (n*n+1) / val;
 }
 
-void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
+void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
 {
     const float origin = 200.0f;
     const float scale  = 5.0f;
@@ -313,6 +311,7 @@ GLFWwindow *LoadGLFW(int width, int height, const char *title)
         return NULL;
     }
     glfwSetErrorCallback(ErrorCallback);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
     GLFWwindow *window = glfwCreateWindow(width, height, title, NULL, NULL);
     glfwSetFramebufferSizeCallback(window, FrameChangeCallback);
@@ -329,12 +328,12 @@ GLFWwindow *LoadGLFW(int width, int height, const char *title)
         return NULL;
     }
 
-    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetScrollCallback(window, ScrollCallback);
     glfwSetKeyCallback(window, KeyCallback);
     return window;
 }
 
-typedef struct
+struct RenderScene
 {
     uint32_t iCount;
     uint32_t vCount;
@@ -362,7 +361,7 @@ typedef struct
     uint32_t    graphcount;
     Vec3        graphcolor[10];
     const char *graphname[10];
-} RenderScene;
+};
 
 typedef struct
 {
@@ -397,7 +396,6 @@ void InitGraph(Graph *graph)
 
     // Make graph->scale use value instead of pixel scale
     graph->scale       = (Vec2){1.0f, 1.0f};
-    graph->value       = 1.0f;
 
     graph->slide_scale = (Vec2){200.0f, 200.0f};
 }
@@ -574,6 +572,11 @@ void LoadFont(Font *font, const char *font_dir)
     memset(font, 0, sizeof(*font));
     stbtt_fontinfo sfont;
     String         fontbuffer = ReadFile(font_dir);
+    if (!fontbuffer.data)
+    {
+        fprintf(stderr, "\nError : Failed to load %s.", font_dir);
+        return;
+    }
     stbtt_InitFont(&sfont, fontbuffer.data, 0);
 
     // Load the character's data from stb_truetype
@@ -724,12 +727,6 @@ void RenderFont(RenderScene *scene_group, Font *font, Mat4* scene_transform)
 
 void RenderLabels(RenderScene *scene_group, Font *font, Graph *graph, Mat4 *orthoMatrix)
 {
-    // first find the center of the graph and put numbers around here adn there
-    // Let's try labeling x-axis
-    // calculate the spacing of the major points first
-    //
-    // TODO:: Make it dynamic
-
     Vec2 origin = graph->center;
     Vec2 position;
 
@@ -759,7 +756,6 @@ void RenderLabels(RenderScene *scene_group, Font *font, Graph *graph, Mat4 *orth
             continue;
         position.x = origin.x - font->height * 1.5f;
         position.y = origin.y + y * graph->slide_scale.y / 2 - font->height / 2;
-        // Now calculate the value at the position
 
         float val   = y * graph->scale.y / 2;
         int   count = snprintf(NULL, 0, "%3g", val);
@@ -776,7 +772,6 @@ void DrawLegends(RenderScene *scene_group, Font *font, Graph *graph) // choose l
     // Finally draw text with plot name -> Already available
     // Find the appropriate place to put the legend
     Vec2 pos = {0};
-    // Saturate these values somewhere
     pos.x      = screen_width - 200;
     pos.y      = screen_height - font->height;
 
@@ -821,10 +816,9 @@ void ShowList(RenderScene* scene_group, Font* font, Graph* graph, float* x, floa
     scene_group->graphname[scene_group->graphcount - 1]  = GiveOnlyStaticStrings;
 }
 
-int main(int argc, char **argv)
+int nolongermain(int argc, char **argv)
 {
     GLFWwindow * window   = LoadGLFW(screen_width, screen_height, "Graph FFI");
-
     Shader       vertex   = LoadShader("./include/vertex.glsl", VERTEX_SHADER);
     Shader       fragment = LoadShader("./include/fragment.glsl", FRAGMENT_SHADER);
 
@@ -907,8 +901,6 @@ int main(int argc, char **argv)
         DrawLegends(&graph, &ComicSans, &graphs);
         RenderRenderScene(&graph, program, false);
 
-
-
         RenderFont(&graph, &ComicSans, &ortho_matrix);
         // glBindVertexArray(0);
         HandleEvents(window, &panner, &graphs);
@@ -950,4 +942,120 @@ void HandleEvents(GLFWwindow *window, State *state, Graph *graph)
     }
     else
         state->bPressed = false;
+}
+
+
+PlotDevice CreatePlottingDevice()
+{
+    PlotDevice  device; 
+
+    device.window   = LoadGLFW(screen_width, screen_height, "Graph FFI");
+
+    Shader      vertex   = LoadShader("./include/vertex.glsl", VERTEX_SHADER);
+    Shader      fragment = LoadShader("./include/fragment.glsl", FRAGMENT_SHADER);
+    device.program  = LoadProgram(vertex, fragment);
+
+    glGenVertexArrays(1, &device.vao);
+    glGenBuffers(1, &device.vbo);
+
+    glBindBuffer(GL_ARRAY_BUFFER, device.vbo);
+    glBindVertexArray(device.vao);
+
+    // magic constant 5000 is total number of vertices allowed 
+    glBufferData(GL_ARRAY_BUFFER, 5000 * 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    RenderScene *scene = malloc(sizeof(*scene));
+    InitRenderScene(scene);
+
+    Mat4 *ortho_matrix  = malloc(sizeof(Mat4));
+    *ortho_matrix = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
+
+    Graph *graph        = malloc(sizeof(*graph));
+    InitGraph(graph);
+
+    UserData* data = malloc(sizeof(*data));
+    *data          = (UserData){.OrthoMatrix = ortho_matrix, .graph = graph};
+    glfwSetWindowUserPointer(device.window, data);
+
+    State panner = {0};
+
+    Font *ComicSans = malloc(sizeof(*ComicSans));
+    LoadFont(ComicSans, "./include/comic.ttf");
+
+    String str = MakeString("@ComicSans");
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    device.render_scene = scene;
+    device.graph        = graph; 
+    device.font         = ComicSans;
+    device.transform    = ortho_matrix;
+    return device;
+}
+
+void ShowPlot(PlotDevice* device)
+{
+    glfwShowWindow(device->window);
+    Mat4  scene_matrix = IdentityMatrix();
+    State panner = {0};
+
+    PlotGraph(device->render_scene, sqrt, device->graph, (Vec3){0.0f, 0.0f, 1.0f}, "sqrt");
+    PlotGraph(device->render_scene, GaussianIntegral, device->graph, (Vec3){0.0f, 1.0f, 0.0f}, "Gaussian");
+    PlotGraph(device->render_scene, cos, device->graph, (Vec3){1.0f, 0.0f, 0.0f}, "cosine");
+    PlotGraph(device->render_scene, tanh, device->graph, (Vec3){1.0f, 0.0f, 1.0f}, "tanh");
+    RenderLabels(device->render_scene, device->font, device->graph, &scene_matrix);
+    
+    while (!glfwWindowShouldClose(device->window))
+    {
+        glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ResetRenderScene(device->render_scene);
+        RenderGraph(device->graph);
+        glUseProgram(device->program);
+        glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE, &device->transform->elem[0][0]);
+        glBindVertexArray(device->vao);
+        glBindBuffer(GL_ARRAY_BUFFER, device->vbo);
+
+        DrawLegends(device->render_scene, device->font, device->graph);
+        RenderRenderScene(device->render_scene, device->program, false);
+        RenderFont(device->render_scene, device->font, device->transform);
+
+        HandleEvents(device->window, &panner,device->graph);
+        glfwSwapBuffers(device->window);
+        glfwPollEvents();
+    }
+}
+
+void DestroyPlottingDevice(PlotDevice *device)
+{
+    free(device->render_scene); 
+    UserData* data = glfwGetWindowUserPointer(device->window);
+    free(data); 
+    free(device->transform); 
+    free(device->graph); 
+    free(device->font);
+    glfwDestroyWindow(device->window); 
+    glfwTerminate(); 
+}
+
+void AddList(PlotDevice* device, float* xpts, float* ypts, int length, float r, float g, float b, const char* cstronly)
+{
+    Vec2 vec;
+    for (int points = 0; points < length; ++points)
+    {
+        vec.x = device->graph->center.x + xpts[points] * device->graph->slide_scale.x / (device->graph->scale.x);
+        vec.y = device->graph->center.y + ypts[points] * device->graph->slide_scale.y / (device->graph->scale.y);
+        AddSingleVertex(device->render_scene, vec);
+    }
+
+    assert(device->render_scene->graphcount < 10);
+    device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->vCount;
+    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = (Vec3){r, g, b};
+    device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
 }

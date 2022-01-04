@@ -7,7 +7,7 @@ typedef struct
     float elem[4][4];
 } Mat4;
 
-Mat4 OrthographicProjection(float left, float right, float bottom, float top, float zNear, float zFar)
+inline Mat4 OrthographicProjection(float left, float right, float bottom, float top, float zNear, float zFar)
 {
     Mat4 matrix       = {{0}};
     matrix.elem[0][0] = 2.0f / (right - left);
@@ -22,7 +22,7 @@ Mat4 OrthographicProjection(float left, float right, float bottom, float top, fl
     return matrix;
 }
 
-Mat4 ScalarMatrix(float x, float y, float z)
+inline Mat4 ScalarMatrix(float x, float y, float z)
 {
     Mat4 matrix       = {{0}};
     matrix.elem[0][0] = x;
@@ -32,7 +32,7 @@ Mat4 ScalarMatrix(float x, float y, float z)
     return matrix;
 }
 
-Mat4 TranslationMatrix(float x, float y, float z)
+inline Mat4 TranslationMatrix(float x, float y, float z)
 {
     Mat4 matrix = {{0}};
 
@@ -47,7 +47,7 @@ Mat4 TranslationMatrix(float x, float y, float z)
     return matrix; 
 }
 
-Mat4 TransposeMatrix(Mat4* mat)
+inline Mat4 TransposeMatrix(Mat4* mat)
 {
     Mat4 matrix = {{0}};
     for (uint8_t row = 0; row < 4; ++row)
@@ -56,7 +56,7 @@ Mat4 TransposeMatrix(Mat4* mat)
     return matrix; 
 }
 
-Mat4 MatrixMultiply(Mat4 *mat1, Mat4 *mat2)
+inline Mat4 MatrixMultiply(Mat4 *mat1, Mat4 *mat2)
 {
     Mat4  matrix = {{0}};
     float var = 0;
@@ -72,7 +72,7 @@ Mat4 MatrixMultiply(Mat4 *mat1, Mat4 *mat2)
     return matrix;
 }
 
-Mat4 IdentityMatrix()
+inline Mat4 IdentityMatrix()
 {
     Mat4 matrix = {{0}};
     matrix.elem[0][0] = 1.0f; 
