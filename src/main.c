@@ -4,9 +4,9 @@
 #include <GLFW/glfw3.h>
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "../include/Graphy.h"
 #include "../include/stb_truetype.h"
 #include "../maths/matrix.h"
+#include "../include/Morph.h"
 
 #include <assert.h>
 #include <math.h>
@@ -32,8 +32,6 @@
         printf("Abort called at func -> %s, line ->  %d.", __func__, __LINE__);                                        \
         abort();                                                                                                       \
     }
-
-typedef double (*oneparamfn)(double);
 
 double GaussianIntegral(double x)
 {
@@ -62,8 +60,8 @@ double discont(double x)
 
 #define no_default_case() __assume(0)
 
-int screen_width  = 800;
-int screen_height = 800;
+static int screen_width  = 800;
+static int screen_height = 800;
 
 typedef struct Vec2
 {
@@ -981,7 +979,7 @@ void HandleEvents(GLFWwindow *window, State *state, Graph *graph)
 // Functions related to API
 // To expose to API we need two sets of data .. first the original values and second scaled values
 
-void APIRecalculate(PlotDevice *device)
+void APIRecalculate(MorphPlotDevice *device)
 {
     device->render_scene->vCount = 0;
     Vec2 vec;
@@ -995,9 +993,9 @@ void APIRecalculate(PlotDevice *device)
     }
 }
 
-PlotDevice CreatePlottingDevice()
+MorphPlotDevice MorphCreateDevice()
 {
-    PlotDevice device;
+    MorphPlotDevice device;
 
     device.window   = LoadGLFW(screen_width, screen_height, "Graph FFI");
 
@@ -1049,9 +1047,9 @@ PlotDevice CreatePlottingDevice()
     return device;
 }
 
-void APIHandleEvents(PlotDevice *device, State *state);
+void APIHandleEvents(MorphPlotDevice *device, State *state);
 
-void APIPlotFunc(PlotDevice *device, oneparamfn fn, float r, float g, float b, const char *cstronly)
+void MorphPlotFunc(MorphPlotDevice *device, oneparamfn fn, float r, float g, float b, const char *cstronly)
 {
     float init = -10.0f;
     float term = 10.0f;
@@ -1072,19 +1070,19 @@ void APIPlotFunc(PlotDevice *device, oneparamfn fn, float r, float g, float b, c
     device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
 }
 
-void APIReset(PlotDevice* device, uint32_t hold)
+void APIReset(MorphPlotDevice* device, uint32_t hold)
 {
     device->render_scene->fCount     = 0;
     device->render_scene->graphcount = hold; 
 }
 
-void ShowPlot(PlotDevice *device)
+void MorphShow(MorphPlotDevice *device)
 {
     glfwShowWindow(device->window);
     Mat4  scene_matrix = IdentityMatrix();
     State panner       = {0};
 
-    APIPlotFunc(device, GaussianIntegral, 0.0f, 1.0f, 0.0f, "Gaussian");
+    MorphPlotFunc(device, GaussianIntegral, 0.0f, 1.0f, 0.0f, "Gaussian");
     // PlotGraph(device->render_scene, cos, device->graph, (Vec3){1.0f, 0.0f, 0.0f}, "cosine");
     // PlotGraph(device->render_scene, tanh, device->graph, (Vec3){1.0f, 0.0f, 1.0f}, "tanh");
     // RenderLabels(device->render_scene, device->font, device->graph, &scene_matrix);
@@ -1115,7 +1113,7 @@ void ShowPlot(PlotDevice *device)
     }
 }
 
-void APIHandleEvents(PlotDevice *device, State *state)
+void APIHandleEvents(MorphPlotDevice *device, State *state)
 {
     if (glfwGetMouseButton(device->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
@@ -1151,7 +1149,7 @@ void APIHandleEvents(PlotDevice *device, State *state)
         state->bPressed = false;
 }
 
-void DestroyPlottingDevice(PlotDevice *device)
+void MorphDestroyDevice(MorphPlotDevice *device)
 {
     free(device->render_scene);
     UserData *data = glfwGetWindowUserPointer(device->window);
@@ -1164,7 +1162,7 @@ void DestroyPlottingDevice(PlotDevice *device)
     glfwTerminate();
 }
 
-void APIAddList(PlotDevice *device, float *xpts, float *ypts, int length, float r, float g, float b,
+void MorphAddList(MorphPlotDevice *device, float *xpts, float *ypts, int length, float r, float g, float b,
                   const char *cstronly)
 {
     Vec2 vec;
