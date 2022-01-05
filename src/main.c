@@ -4,9 +4,9 @@
 #include <GLFW/glfw3.h>
 
 #define STB_TRUETYPE_IMPLEMENTATION
+#include "../include/Graphy.h"
 #include "../include/stb_truetype.h"
 #include "../maths/matrix.h"
-#include "../include/Graphy.h"
 
 #include <assert.h>
 #include <math.h>
@@ -17,8 +17,8 @@
 #include <string.h>
 
 // TODO :: Place co-ordinate values on the axes -> Loading fonts -> Font loaded -> Almost done
-// TODO :: Scaling around point -> Lesszz do it -> Done without matrix 
-// TODO :: Labels shown at bottom or left if origin isn't within the frame 
+// TODO :: Scaling around point -> Lesszz do it -> Done without matrix
+// TODO :: Labels shown at bottom or left if origin isn't within the frame
 // TODO :: Minimize floating point errors
 // TODO :: Allow customization
 // TODO :: Allow multiple graphs be drawn on the same window -> Done simply (No plot device yet)
@@ -33,7 +33,7 @@
         abort();                                                                                                       \
     }
 
-typedef double (*trigfn)(double);
+typedef double (*oneparamfn)(double);
 
 double GaussianIntegral(double x)
 {
@@ -140,13 +140,31 @@ void KeyCallback(GLFWwindow *window, int key, int scancode, int mod, int action)
 
 float MagicNumberGenerator(int n)
 {
-    int non_neg = n >= 0 ? 1 : ((n=-n-1,(n = 2 - n % 3 + 3 * (n / 3) + 3)), 0);
-    int p = n / 3; 
-    n = n % 3;
-    float val = 1; 
+    // Try deciphering it .. :D 
+    int non_neg = n >= 0 ? 1 : ((n = -n - 1, (n = 2 - n % 3 + 3 * (n / 3) + 3)), 0);
+    int p       = n / 3;
+    n           = n % 3;
+    float val   = 1;
+    // lets try some inline asm 
+    //   __asm {
+    //       push rsi
+	//	push rax
+	//	xor rax, rax
+	//	mov  rsi, 1
+	//L1:
+	//	lea  rsi, [rsi + rsi * 4]
+	//	inc  rax
+	//	add  rsi, rsi 
+	//	cmp  eax, z
+	//	jne  L1 
+	//	mov  a, esi 
+	//	pop rax 
+	//	pop rsi 
+    //   }
+    // Lol not supported in x64 architecture
     for (int i = 0; i < p; ++i)
         val *= 10;
-    return non_neg ? (n * n + 1) * val : (n*n+1) / val;
+    return non_neg ? (n * n + 1) * val : (n * n + 1) / val;
 }
 
 void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
@@ -157,8 +175,8 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
     UserData *  data   = glfwGetWindowUserPointer(window);
     Graph *     graph  = data->graph;
 
-    // capture mouse co-ordinates here 
-    double xPos, yPos; 
+    // capture mouse co-ordinates here
+    double xPos, yPos;
     glfwGetCursorPos(window, &xPos, &yPos);
     // shift the origin somewhere far from here
 
@@ -169,22 +187,18 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
     graph->slide_scale.x += scale * yoffset;
     scaledFactor = graph->slide_scale.x / prev_scale_x;
     // Dynamic scaling looks kinda hard
-    // TODO :: Encode it with a magic sequence 
-    // float      scaleArr[] = {0.0001f,0.002f,0.005f,0.001f,0.002f,0.005f,0.01f, 0.02f, 0.05f, 0.1f, 0.2f, 0.5f, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000};
-    static int absScale   = 0;
+    static int absScale = 0;
 
-    // TODO :: Make the transition smooth
     bool changeX = false, changeY = false;
     if (yoffset < 0)
     {
         float should_scale_x = origin / graph->slide_scale.x * graph->scale.x;
         if (should_scale_x >= MagicNumberGenerator(absScale + 1))
             changeX = true;
-            // rough estimation     
     }
     else if (yoffset > 0)
     {
-        float should_downscale = origin / graph->slide_scale.x * graph->scale.x; 
+        float should_downscale = origin / graph->slide_scale.x * graph->scale.x;
         if (should_downscale <= MagicNumberGenerator(absScale - 1))
             changeY = true;
     }
@@ -203,11 +217,11 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
         }
         graph->slide_scale = (Vec2){origin, origin};
     }
-    // Now shift the origin to somewhere else .. don't know where yet 
-    // Its awkard to do these kinda stuffs without matrix .. haha 
-    int delX = -xPos + graph->center.x; 
+    // Now shift the origin to somewhere else .. don't know where yet
+    // Its awkard to do these kinda stuffs without matrix .. haha
+    int delX = -xPos + graph->center.x;
     int delY = -yPos + graph->center.y;
-    graph->center.x += delX * scaledFactor - delX; 
+    graph->center.x += delX * scaledFactor - delX;
     graph->center.y += delY * scaledFactor - delY;
 }
 
@@ -336,7 +350,9 @@ GLFWwindow *LoadGLFW(int width, int height, const char *title)
 struct RenderScene
 {
     uint32_t iCount;
-    uint32_t vCount;
+    uint32_t vCount; // To be rendered vertices
+
+    uint32_t pCount; // Original Vertices
 
     uint32_t iMax;
     uint32_t vMax;
@@ -349,6 +365,7 @@ struct RenderScene
     uint32_t *Indices;
     uint32_t *Discontinuity;
     Vec2 *    Vertices;
+    Vec2 *    Points;
 
     // Need support for font rendering here
     uint32_t fCount; // This might seem inconsistent but whatever
@@ -412,6 +429,15 @@ void RenderGraph(Graph *graph)
     glBindVertexArray(0);
 }
 
+void DestroyRenderScene(RenderScene* render_scene)
+{
+    free(render_scene->Indices); 
+    free(render_scene->Vertices); 
+    free(render_scene->Discontinuity);
+    free(render_scene->Points); 
+    free(render_scene->fVertices);
+}
+
 void InitRenderScene(RenderScene *scene_group)
 {
     memset(scene_group, 0, sizeof(*scene_group));
@@ -422,15 +448,23 @@ void InitRenderScene(RenderScene *scene_group)
     scene_group->Indices       = malloc(sizeof(*scene_group->Indices) * scene_group->iMax);
     scene_group->Vertices      = malloc(sizeof(*scene_group->Vertices) * scene_group->vMax);
     scene_group->Discontinuity = malloc(sizeof(*scene_group->Discontinuity) * scene_group->dMax);
+    scene_group->Points        = malloc(sizeof(*scene_group->Vertices) * scene_group->vMax);
 
-    const int maxFontVertices   = 10000; // will render 500/6 fonts only
+    const int maxFontVertices  = 10000; // will render 10000/6 fonts only
     scene_group->fVertices     = malloc(sizeof(*scene_group->fVertices) * maxFontVertices);
 }
 
 void AddSingleVertex(RenderScene *scene_group, Vec2 vertex)
 {
+    // TODO :: Remove this bound check .. Expensiiiivvve
     assert(scene_group->vCount + 1 <= scene_group->vMax);
     scene_group->Vertices[scene_group->vCount++] = vertex;
+}
+
+void AddSinglePoint(RenderScene *scene_group, Vec2 vertex)
+{
+    assert(scene_group->pCount + 1 <= scene_group->vMax);
+    scene_group->Points[scene_group->pCount++] = vertex;
 }
 
 void RenderRenderScene(RenderScene *scene_group, unsigned int program, bool showPoints)
@@ -483,10 +517,11 @@ void ResetRenderScene(RenderScene *scene_group)
     scene_group->vCount     = 0;
     scene_group->dCount     = 0;
     scene_group->fCount     = 0;
+    scene_group->pCount     = 0;
     scene_group->graphcount = 0;
 }
 
-void PlotGraph(RenderScene *scene_group, trigfn func, Graph *graph, Vec3 color, const char *legend)
+void PlotGraph(RenderScene *scene_group, oneparamfn func, Graph *graph, Vec3 color, const char *legend)
 {
     Vec2  vec1, vec2;
 
@@ -558,7 +593,7 @@ typedef struct Font
     unsigned int font_texture;
     unsigned int vao;
     unsigned int vbo;
-    unsigned int program; 
+    unsigned int program;
     float        rasterScale;
     int          width;
     int          height;
@@ -662,9 +697,9 @@ void LoadFont(Font *font, const char *font_dir)
     font->width = width;
 
     // Font shaders and program
-    Shader       font_vertex   = LoadShader("./include/text_vertex.glsl", VERTEX_SHADER);
-    Shader       font_fragment = LoadShader("./include/text_fragment.glsl", FRAGMENT_SHADER);
-    font->program              = LoadProgram(font_vertex, font_fragment);
+    Shader font_vertex   = LoadShader("./include/text_vertex.glsl", VERTEX_SHADER);
+    Shader font_fragment = LoadShader("./include/text_fragment.glsl", FRAGMENT_SHADER);
+    font->program        = LoadProgram(font_vertex, font_fragment);
 }
 
 // position in pixel where (0,0) is the lower left corner of the screen
@@ -705,12 +740,12 @@ void FillText(RenderScene *scene_group, Font *font, Vec2 position, String str, i
         scene_group->fVertices[count * 12 + 10] = (Vec2){x, y};
         scene_group->fVertices[count * 12 + 11] = (Vec2){tex0, 1.0f};
 
-        x                                        = x + glyph.Advance;
+        x                                       = x + glyph.Advance;
         scene_group->fCount += 1;
     }
 }
 
-void RenderFont(RenderScene *scene_group, Font *font, Mat4* scene_transform)
+void RenderFont(RenderScene *scene_group, Font *font, Mat4 *scene_transform)
 {
     glUseProgram(font->program);
     glBindVertexArray(font->vao);
@@ -730,9 +765,9 @@ void RenderLabels(RenderScene *scene_group, Font *font, Graph *graph, Mat4 *orth
     Vec2 origin = graph->center;
     Vec2 position;
 
-    // Calculate the min and max vertical bar visible on the current frame first 
-    int xLow = -origin.x / graph->slide_scale.x - 1; 
-    int xHigh = (screen_width - origin.x) / graph->slide_scale.x + 1; 
+    // Calculate the min and max vertical bar visible on the current frame first
+    int xLow  = -origin.x / graph->slide_scale.x - 1;
+    int xHigh = (screen_width - origin.x) / graph->slide_scale.x + 1;
 
     for (int i = xLow * 2; i <= xHigh * 2; ++i)
     {
@@ -748,14 +783,14 @@ void RenderLabels(RenderScene *scene_group, Font *font, Graph *graph, Mat4 *orth
     }
 
     int yLow  = -origin.y / graph->slide_scale.y - 1;
-    int yHigh = (screen_height - origin.y) / graph->slide_scale.y + 1; 
+    int yHigh = (screen_height - origin.y) / graph->slide_scale.y + 1;
 
     for (int y = yLow * 2; y <= yHigh * 2; ++y)
     {
         if (y == 0)
             continue;
-        position.x = origin.x - font->height * 1.5f;
-        position.y = origin.y + y * graph->slide_scale.y / 2 - font->height / 2;
+        position.x  = origin.x - font->height * 1.5f;
+        position.y  = origin.y + y * graph->slide_scale.y / 2 - font->height / 2;
 
         float val   = y * graph->scale.y / 2;
         int   count = snprintf(NULL, 0, "%3g", val);
@@ -771,7 +806,7 @@ void DrawLegends(RenderScene *scene_group, Font *font, Graph *graph) // choose l
     // Draw a small rectangle filled with that color -> Might need a new pixel shader -> Used simple line instead
     // Finally draw text with plot name -> Already available
     // Find the appropriate place to put the legend
-    Vec2 pos = {0};
+    Vec2 pos   = {0};
     pos.x      = screen_width - 200;
     pos.y      = screen_height - font->height;
 
@@ -800,9 +835,10 @@ void DrawLegends(RenderScene *scene_group, Font *font, Graph *graph) // choose l
     scene_group->graphname[scene_group->graphcount - 1]  = ""; // only static strings are expected as of yet
 }
 
-void ShowList(RenderScene* scene_group, Font* font, Graph* graph, float* x, float* y, int length, const char* GiveOnlyStaticStrings, Vec3 color)
+void ShowList(RenderScene *scene_group, Font *font, Graph *graph, float *x, float *y, int length,
+              const char *GiveOnlyStaticStrings, Vec3 color)
 {
-    Vec2 vec; 
+    Vec2 vec;
     for (int points = 0; points < length; ++points)
     {
         vec.x = graph->center.x + x[points] * graph->slide_scale.x / (graph->scale.x);
@@ -842,7 +878,7 @@ int nolongermain(int argc, char **argv)
     RenderScene graph;
     InitRenderScene(&graph);
 
-    Mat4 scene_matrix = IdentityMatrix();
+    Mat4  scene_matrix = IdentityMatrix();
     Mat4  ortho_matrix = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
 
     Graph graphs;
@@ -854,9 +890,7 @@ int nolongermain(int argc, char **argv)
     // PlotParametric(&graph, RoseCurves, &graphs);
     State panner = {0};
 
-
-
-    Font         ComicSans;
+    Font  ComicSans;
     LoadFont(&ComicSans, "./include/comic.ttf");
 
     String str = MakeString("@ComicSans");
@@ -866,13 +900,13 @@ int nolongermain(int argc, char **argv)
     // glEnable(GL_MULTISAMPLE);
 
     // Mulitple discontinuous graphs aren't supported fully for now
-    float *x = malloc(sizeof(float) * 10); 
-    float *y = malloc(sizeof(float) * 10);
+    float *x     = malloc(sizeof(float) * 10);
+    float *y     = malloc(sizeof(float) * 10);
     int    count = 10;
     for (int i = 0; i < 10; ++i)
     {
         x[i] = i;
-        y[i] = i * i; 
+        y[i] = i * i;
     }
 
     while (!glfwWindowShouldClose(window))
@@ -887,7 +921,7 @@ int nolongermain(int argc, char **argv)
         PlotGraph(&graph, GaussianIntegral, &graphs, (Vec3){0.0f, 1.0f, 0.0f}, "Gaussian");
         // PlotGraph(&graph, cos, &graphs, (Vec3){1.0f, 0.0f, 0.0f}, "cosine");
         PlotGraph(&graph, tanh, &graphs, (Vec3){1.0f, 0.0f, 1.0f}, "tanh");
-        ShowList(&graph, &ComicSans, &graphs, x, y, count, "List Plot", (Vec3){1.0f,1.0f,0.0f});
+        ShowList(&graph, &ComicSans, &graphs, x, y, count, "List Plot", (Vec3){1.0f, 1.0f, 0.0f});
         RenderGraph(&graphs);
         RenderLabels(&graph, &ComicSans, &graphs, &scene_matrix);
         glUseProgram(program);
@@ -944,15 +978,31 @@ void HandleEvents(GLFWwindow *window, State *state, Graph *graph)
         state->bPressed = false;
 }
 
+// Functions related to API
+// To expose to API we need two sets of data .. first the original values and second scaled values
+
+void APIRecalculate(PlotDevice *device)
+{
+    device->render_scene->vCount = 0;
+    Vec2 vec;
+    for (int re = 0; re < device->render_scene->pCount; ++re)
+    {
+        vec.x = device->graph->center.x +
+                device->render_scene->Points[re].x * device->graph->slide_scale.x / (device->graph->scale.x);
+        vec.y = device->graph->center.y +
+                device->render_scene->Points[re].y * device->graph->slide_scale.y / (device->graph->scale.y);
+        AddSingleVertex(device->render_scene, vec);
+    }
+}
 
 PlotDevice CreatePlottingDevice()
 {
-    PlotDevice  device; 
+    PlotDevice device;
 
     device.window   = LoadGLFW(screen_width, screen_height, "Graph FFI");
 
-    Shader      vertex   = LoadShader("./include/vertex.glsl", VERTEX_SHADER);
-    Shader      fragment = LoadShader("./include/fragment.glsl", FRAGMENT_SHADER);
+    Shader vertex   = LoadShader("./include/vertex.glsl", VERTEX_SHADER);
+    Shader fragment = LoadShader("./include/fragment.glsl", FRAGMENT_SHADER);
     device.program  = LoadProgram(vertex, fragment);
 
     glGenVertexArrays(1, &device.vao);
@@ -961,7 +1011,7 @@ PlotDevice CreatePlottingDevice()
     glBindBuffer(GL_ARRAY_BUFFER, device.vbo);
     glBindVertexArray(device.vao);
 
-    // magic constant 5000 is total number of vertices allowed 
+    // magic constant 5000 is total number of vertices allowed
     glBufferData(GL_ARRAY_BUFFER, 5000 * 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
 
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
@@ -973,17 +1023,17 @@ PlotDevice CreatePlottingDevice()
     RenderScene *scene = malloc(sizeof(*scene));
     InitRenderScene(scene);
 
-    Mat4 *ortho_matrix  = malloc(sizeof(Mat4));
-    *ortho_matrix = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
+    Mat4 *ortho_matrix = malloc(sizeof(Mat4));
+    *ortho_matrix      = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
 
-    Graph *graph        = malloc(sizeof(*graph));
+    Graph *graph       = malloc(sizeof(*graph));
     InitGraph(graph);
 
-    UserData* data = malloc(sizeof(*data));
+    UserData *data = malloc(sizeof(*data));
     *data          = (UserData){.OrthoMatrix = ortho_matrix, .graph = graph};
     glfwSetWindowUserPointer(device.window, data);
 
-    State panner = {0};
+    State panner    = {0};
 
     Font *ComicSans = malloc(sizeof(*ComicSans));
     LoadFont(ComicSans, "./include/comic.ttf");
@@ -993,58 +1043,129 @@ PlotDevice CreatePlottingDevice()
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     device.render_scene = scene;
-    device.graph        = graph; 
+    device.graph        = graph;
     device.font         = ComicSans;
     device.transform    = ortho_matrix;
     return device;
 }
 
-void ShowPlot(PlotDevice* device)
+void APIHandleEvents(PlotDevice *device, State *state);
+
+void APIPlotFunc(PlotDevice *device, oneparamfn fn, float r, float g, float b, const char *cstronly)
+{
+    float init = -10.0f;
+    float term = 10.0f;
+    float step = 0.05f;
+    Vec2  vec;
+
+    for (float x = init; x <= term; x += step)
+    {
+        // This API version doesn't check for discontinuity .. Above function checks for discontinuity of one function
+        vec.x = x;
+        vec.y = fn(vec.x);
+        AddSinglePoint(device->render_scene, vec);
+    }
+    // Add number of vertices in the current graph
+    assert(device->render_scene->graphcount < 10);
+    device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
+    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = (Vec3){r,g,b};
+    device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
+}
+
+void APIReset(PlotDevice* device, uint32_t hold)
+{
+    device->render_scene->fCount     = 0;
+    device->render_scene->graphcount = hold; 
+}
+
+void ShowPlot(PlotDevice *device)
 {
     glfwShowWindow(device->window);
     Mat4  scene_matrix = IdentityMatrix();
-    State panner = {0};
+    State panner       = {0};
 
-    PlotGraph(device->render_scene, sqrt, device->graph, (Vec3){0.0f, 0.0f, 1.0f}, "sqrt");
-    PlotGraph(device->render_scene, GaussianIntegral, device->graph, (Vec3){0.0f, 1.0f, 0.0f}, "Gaussian");
-    PlotGraph(device->render_scene, cos, device->graph, (Vec3){1.0f, 0.0f, 0.0f}, "cosine");
-    PlotGraph(device->render_scene, tanh, device->graph, (Vec3){1.0f, 0.0f, 1.0f}, "tanh");
-    RenderLabels(device->render_scene, device->font, device->graph, &scene_matrix);
-    
+    APIPlotFunc(device, GaussianIntegral, 0.0f, 1.0f, 0.0f, "Gaussian");
+    // PlotGraph(device->render_scene, cos, device->graph, (Vec3){1.0f, 0.0f, 0.0f}, "cosine");
+    // PlotGraph(device->render_scene, tanh, device->graph, (Vec3){1.0f, 0.0f, 1.0f}, "tanh");
+    // RenderLabels(device->render_scene, device->font, device->graph, &scene_matrix);
+
+    uint32_t hold = device->render_scene->graphcount; 
+
     while (!glfwWindowShouldClose(device->window))
     {
         glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-        ResetRenderScene(device->render_scene);
+        // Instead of re-rendering, change the scale of the already plotted points
+        APIReset(device,hold);
+        APIRecalculate(device);
         RenderGraph(device->graph);
         glUseProgram(device->program);
         glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE, &device->transform->elem[0][0]);
         glBindVertexArray(device->vao);
         glBindBuffer(GL_ARRAY_BUFFER, device->vbo);
 
+        RenderLabels(device->render_scene, device->font, device->graph, device->transform);
         DrawLegends(device->render_scene, device->font, device->graph);
         RenderRenderScene(device->render_scene, device->program, false);
         RenderFont(device->render_scene, device->font, device->transform);
 
-        HandleEvents(device->window, &panner,device->graph);
+        APIHandleEvents(device, &panner);
         glfwSwapBuffers(device->window);
         glfwPollEvents();
     }
 }
 
-void DestroyPlottingDevice(PlotDevice *device)
+void APIHandleEvents(PlotDevice *device, State *state)
 {
-    free(device->render_scene); 
-    UserData* data = glfwGetWindowUserPointer(device->window);
-    free(data); 
-    free(device->transform); 
-    free(device->graph); 
-    free(device->font);
-    glfwDestroyWindow(device->window); 
-    glfwTerminate(); 
+    if (glfwGetMouseButton(device->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    {
+        double xpos, ypos;
+        glfwGetCursorPos(device->window, &xpos, &ypos);
+        switch (state->bPressed)
+        {
+        case false:
+            state->bPressed = true;
+            state->xpos     = xpos;
+            state->ypos     = ypos;
+            break;
+        case true:
+        {
+            double delX = xpos - state->xpos;
+            double delY = ypos - state->ypos;
+            device->graph->center.x += delX;
+            device->graph->center.y -= delY;
+
+            // Now shift all the plotted points
+            for (int pt = 0; pt < device->render_scene->vCount; ++pt)
+            {
+            }
+            state->xpos = xpos;
+            state->ypos = ypos;
+        }
+        break;
+        default:
+            TriggerBreakpoint();
+        }
+    }
+    else
+        state->bPressed = false;
 }
 
-void AddList(PlotDevice* device, float* xpts, float* ypts, int length, float r, float g, float b, const char* cstronly)
+void DestroyPlottingDevice(PlotDevice *device)
+{
+    free(device->render_scene);
+    UserData *data = glfwGetWindowUserPointer(device->window);
+    free(data);
+    free(device->transform);
+    free(device->graph);
+    free(device->font);
+    DestroyRenderScene(device->render_scene);
+    glfwDestroyWindow(device->window);
+    glfwTerminate();
+}
+
+void APIAddList(PlotDevice *device, float *xpts, float *ypts, int length, float r, float g, float b,
+                  const char *cstronly)
 {
     Vec2 vec;
     for (int points = 0; points < length; ++points)

@@ -1,8 +1,14 @@
 #include "../include/Graphy.h"
 
-int main() 
+double what(double x)
 {
-    PlotDevice device = CreatePlottingDevice(); 
-    ShowPlot(&device); 
+    return x * x * x;
+}
+
+int main()
+{
+    PlotDevice device = CreatePlottingDevice();
+    APIPlotFunc(device, what, 0.0f, 0.0f, 1.0f, "sqrt");
+    ShowPlot(&device);
     return 0;
 }
