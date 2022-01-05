@@ -2,11 +2,11 @@
 
 // Ye .. this API will be called Morph -> Morphism now 
 #include <GLFW/glfw3.h>
-#include "../maths/matrix.h"
 
 typedef struct RenderScene RenderScene;
 typedef struct Graph       Graph;
 typedef struct Font        Font;
+typedef struct Mat4        Mat4;
 
 typedef double (*oneparamfn)(double);
 
