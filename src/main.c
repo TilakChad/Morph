@@ -4,8 +4,8 @@
 #include <GLFW/glfw3.h>
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "../include/stb_truetype.h"
 #include "../include/Morph.h"
+#include "../include/stb_truetype.h"
 
 #include <assert.h>
 #include <math.h>
@@ -25,7 +25,6 @@
 // Make UI appealing -> Partially done
 
 // TODO Later : Add terminal and a parser
-
 
 #define TriggerBreakpoint()                                                                                            \
     {                                                                                                                  \
@@ -59,7 +58,6 @@ double discont(double x)
 }
 
 #define no_default_case() __assume(0)
-
 
 struct Mat4
 {
@@ -189,12 +187,12 @@ typedef enum
 {
     VERTEX_SHADER,
     FRAGMENT_SHADER
-} shader_type;
+} ShaderType;
 
 typedef struct
 {
     unsigned int shader;
-    shader_type  type;
+    ShaderType   type;
 } Shader;
 
 void ErrorCallback(int code, const char *description)
@@ -219,26 +217,26 @@ void KeyCallback(GLFWwindow *window, int key, int scancode, int mod, int action)
 
 float MagicNumberGenerator(int n)
 {
-    // Try deciphering it .. :D 
+    // Try deciphering it .. :D
     int non_neg = n >= 0 ? 1 : ((n = -n - 1, (n = 2 - n % 3 + 3 * (n / 3) + 3)), 0);
     int p       = n / 3;
     n           = n % 3;
     float val   = 1;
-    // lets try some inline asm 
+    // lets try some inline asm
     //   __asm {
     //       push rsi
-	//	push rax
-	//	xor rax, rax
-	//	mov  rsi, 1
-	//L1:
-	//	lea  rsi, [rsi + rsi * 4]
-	//	inc  rax
-	//	add  rsi, rsi 
-	//	cmp  eax, z
-	//	jne  L1 
-	//	mov  a, esi 
-	//	pop rax 
-	//	pop rsi 
+    //	push rax
+    //	xor rax, rax
+    //	mov  rsi, 1
+    // L1:
+    //	lea  rsi, [rsi + rsi * 4]
+    //	inc  rax
+    //	add  rsi, rsi
+    //	cmp  eax, z
+    //	jne  L1
+    //	mov  a, esi
+    //	pop rax
+    //	pop rsi
     //   }
     // Lol not supported in x64 architecture
     for (int i = 0; i < p; ++i)
@@ -268,7 +266,7 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
     // Dynamic scaling looks kinda hard
     static int absScale = 0;
 
-    bool changeX = false, changeY = false;
+    bool       changeX = false, changeY = false;
     if (yoffset < 0)
     {
         float should_scale_x = origin / graph->slide_scale.x * graph->scale.x;
@@ -351,7 +349,8 @@ String ReadFile(const char *file_path)
     return contents;
 }
 
-Shader LoadShader(const char *shader_path, shader_type type)
+Shader LoadShadersFromString(const char *cstr, ShaderType type);
+Shader LoadShader(const char *shader_path, ShaderType type)
 {
     String       str = ReadFile(shader_path);
     Shader       shader;
@@ -484,11 +483,29 @@ void InitGraph(Graph *graph)
 
     glBindVertexArray(0);
 
-    Shader vertex   = LoadShader("./include/grid_vertex.glsl", VERTEX_SHADER);
-    Shader fragment = LoadShader("./include/grid_fragment.glsl", FRAGMENT_SHADER);
-    graph->program  = LoadProgram(vertex, fragment);
+    // Shader vertex   = LoadShader("./include/grid_vertex.glsl", VERTEX_SHADER);
+    // Shader fragment = LoadShader("./include/grid_fragment.glsl", FRAGMENT_SHADER);
 
-    graph->center   = (Vec2){400.0f, 400.0f};
+    Shader vertex = LoadShadersFromString("#version 330 core \r\n\r\nlayout (location = 0) in vec2 aPos; \r\n\r\nvoid "
+                                          "main() \r\n{ \r\n\tgl_Position = vec4(aPos,0.0f,1.0f);\r\n}",
+                                          VERTEX_SHADER);
+    Shader fragment = LoadShadersFromString(
+        "#version 330 core \r\n\r\nout vec4 color; \r\n\r\n// not working with uniform buffer for now \r\n// Lets try "
+        "drawing a checkerboard \r\n// uniform int scale;\r\n\r\nuniform vec2 scale;\r\nuniform int "
+        "grid_width;\r\n\r\nuniform vec2 center; \r\n\r\nvoid main() \r\n{\r\n\tvec2 scr = gl_FragCoord.xy;\r\n\tint "
+        "delX = abs(int(scr.x-center.x)); \r\n\tint delY = abs(int(scr.y-center.y));\r\n\t\r\n\tint X = int(scale.x); "
+        "\r\n\tif (X % 2 != 0) \r\n\t\tX = X + 1; \r\n\r\n\tint Y = X;\r\n\r\n\tint halfX = X / 2; \r\n\tint halfY = "
+        "halfX; \r\n\r\n\t// TODO :: Rewrite it in branchless way \r\n\tif ( (delX % halfX <= grid_width) || (delY % "
+        "halfY <= grid_width))\r\n\t\tcolor = vec4(0.0f,0.7f,0.7f,1.0f); \r\n\telse\r\n\t\tcolor = "
+        "vec4(1.0f,1.0f,1.0f,1.0f);\r\n\t\t\r\n\tif ( (delX % X <= grid_width+2) || (delY % Y <= "
+        "grid_width+2))\r\n\t\tcolor = vec4(0.5f,0.5f,0.5f,1.0f);\r\n\r\n\r\n\tif (abs(scr.x - center.x) < 3.0f) "
+        "\r\n\t\tcolor = vec4(1.0f,0.0f,0.0f,1.0f);\r\n\tif (abs(scr.y - center.y) < 3.0f) \r\n\t\tcolor = "
+        "vec4(1.0f,0.0f,0.0f,1.0f);\r\n}",
+        FRAGMENT_SHADER);
+
+    graph->program = LoadProgram(vertex, fragment);
+
+    graph->center  = (Vec2){400.0f, 400.0f};
 
     // Make graph->scale use value instead of pixel scale
     graph->scale       = (Vec2){1.0f, 1.0f};
@@ -508,12 +525,12 @@ void RenderGraph(Graph *graph)
     glBindVertexArray(0);
 }
 
-void DestroyRenderScene(RenderScene* render_scene)
+void DestroyRenderScene(RenderScene *render_scene)
 {
-    free(render_scene->Indices); 
-    free(render_scene->Vertices); 
+    free(render_scene->Indices);
+    free(render_scene->Vertices);
     free(render_scene->Discontinuity);
-    free(render_scene->Points); 
+    free(render_scene->Points);
     free(render_scene->fVertices);
 }
 
@@ -776,9 +793,19 @@ void LoadFont(Font *font, const char *font_dir)
     font->width = width;
 
     // Font shaders and program
-    Shader font_vertex   = LoadShader("./include/text_vertex.glsl", VERTEX_SHADER);
-    Shader font_fragment = LoadShader("./include/text_fragment.glsl", FRAGMENT_SHADER);
-    font->program        = LoadProgram(font_vertex, font_fragment);
+    Shader font_vertex = LoadShadersFromString(
+        "#version 330 core \r\n\r\nlayout (location = 0) in vec2 aPos; \r\nlayout (location = 1) in vec2 Tex;\r\n// "
+        "might need a matrix somewhere here \r\n\r\nout vec2 TexCoord; \r\nuniform mat4 scene; \r\n\r\nvoid "
+        "main()\r\n{\r\n\tgl_Position = scene * vec4(aPos,0.0f,1.0f);\r\n\tTexCoord = Tex; \r\n}",
+        VERTEX_SHADER);
+
+    Shader font_fragment =
+        LoadShadersFromString("#version 330 core\r\n\r\nout vec4 color_vec; \r\n\r\nin vec2 TexCoord; \r\nuniform "
+                              "sampler2D font;\r\n\r\n\r\nvoid main()\r\n{\r\n\tvec4 color = "
+                              "texture(font,TexCoord);\r\n\tcolor_vec = vec4(0.0f,0.0f,0.0f,color.r);\r\n}",
+                              FRAGMENT_SHADER);
+
+    font->program = LoadProgram(font_vertex, font_fragment);
 }
 
 // position in pixel where (0,0) is the lower left corner of the screen
@@ -1074,15 +1101,58 @@ void APIRecalculate(MorphPlotDevice *device)
     }
 }
 
+Shader LoadShadersFromString(const char *cstr, ShaderType type)
+{
+    unsigned int shader_define;
+    Shader       shader;
+    switch (type)
+    {
+    case FRAGMENT_SHADER:
+        shader_define = GL_FRAGMENT_SHADER;
+        break;
+    case VERTEX_SHADER:
+        shader_define = GL_VERTEX_SHADER;
+        break;
+    default:
+        TriggerBreakpoint();
+    }
+    shader.shader = glCreateShader(shader_define);
+    shader.type   = type;
+    glShaderSource(shader.shader, 1, (const char *const *)&cstr, NULL);
+    glCompileShader(shader.shader);
+    int compiled;
+    glGetShaderiv(shader.shader, GL_COMPILE_STATUS, &compiled);
+
+    if (!compiled)
+    {
+        char infoLog[512];
+        glGetShaderInfoLog(shader.shader, 512, NULL, infoLog);
+        fprintf(stderr, "Failed to compile %s",
+                (shader_define == GL_VERTEX_SHADER ? "vertex shader" : "fragment shader"));
+        fprintf(stderr, "Reason -> %s.", infoLog);
+    }
+    else
+        fprintf(stderr, "\n%s compilation passed.\n",
+                (shader_define == GL_VERTEX_SHADER ? "vertex shader" : "fragment shader"));
+    return shader;
+}
+
 MorphPlotDevice MorphCreateDevice()
 {
     MorphPlotDevice device;
 
-    device.window   = LoadGLFW(screen_width, screen_height, "Graph FFI");
+    device.window = LoadGLFW(screen_width, screen_height, "Graph FFI");
 
-    Shader vertex   = LoadShader("./include/vertex.glsl", VERTEX_SHADER);
-    Shader fragment = LoadShader("./include/fragment.glsl", FRAGMENT_SHADER);
-    device.program  = LoadProgram(vertex, fragment);
+    Shader vertex =
+        LoadShadersFromString("#version 330 core \r\nlayout (location = 0) in vec2 aPos; \r\n\r\nuniform mat4 scene; "
+                              "\r\n\r\nvoid main() \r\n{\r\n\tgl_Position = scene * vec4(aPos,0.0f,1.0f);\r\n}",
+                              VERTEX_SHADER);
+    Shader fragment = LoadShadersFromString(
+        "#version 330 core \r\n\r\nuniform vec3 inColor; \r\nout vec4 color; \r\nvoid main()\r\n{\r\n\t// "
+        "color = vec4(0.0f,1.0f,0.0f,1.0f);\r\n\tcolor = vec4(inColor,1.0f);\r\n}",
+        FRAGMENT_SHADER);
+
+    device.program = LoadProgram(vertex, fragment);
 
     glGenVertexArrays(1, &device.vao);
     glGenBuffers(1, &device.vbo);
@@ -1128,8 +1198,6 @@ MorphPlotDevice MorphCreateDevice()
     return device;
 }
 
-void APIHandleEvents(MorphPlotDevice *device, State *state);
-
 void MorphPlotFunc(MorphPlotDevice *device, oneparamfn fn, float r, float g, float b, const char *cstronly)
 {
     float init = -10.0f;
@@ -1147,14 +1215,14 @@ void MorphPlotFunc(MorphPlotDevice *device, oneparamfn fn, float r, float g, flo
     // Add number of vertices in the current graph
     assert(device->render_scene->graphcount < 10);
     device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
-    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = (Vec3){r,g,b};
+    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = (Vec3){r, g, b};
     device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
 }
 
-void APIReset(MorphPlotDevice* device, uint32_t hold)
+void APIReset(MorphPlotDevice *device, uint32_t hold)
 {
     device->render_scene->fCount     = 0;
-    device->render_scene->graphcount = hold; 
+    device->render_scene->graphcount = hold;
 }
 
 void MorphShow(MorphPlotDevice *device)
@@ -1168,14 +1236,14 @@ void MorphShow(MorphPlotDevice *device)
     // PlotGraph(device->render_scene, tanh, device->graph, (Vec3){1.0f, 0.0f, 1.0f}, "tanh");
     // RenderLabels(device->render_scene, device->font, device->graph, &scene_matrix);
 
-    uint32_t hold = device->render_scene->graphcount; 
+    uint32_t hold = device->render_scene->graphcount;
 
     while (!glfwWindowShouldClose(device->window))
     {
         glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         // Instead of re-rendering, change the scale of the already plotted points
-        APIReset(device,hold);
+        APIReset(device, hold);
         APIRecalculate(device);
         RenderGraph(device->graph);
         glUseProgram(device->program);
@@ -1188,46 +1256,10 @@ void MorphShow(MorphPlotDevice *device)
         RenderRenderScene(device->render_scene, device->program, false);
         RenderFont(device->render_scene, device->font, device->transform);
 
-        APIHandleEvents(device, &panner);
+        HandleEvents(device->window, &panner, device->graph);
         glfwSwapBuffers(device->window);
         glfwPollEvents();
     }
-}
-
-void APIHandleEvents(MorphPlotDevice *device, State *state)
-{
-    if (glfwGetMouseButton(device->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-    {
-        double xpos, ypos;
-        glfwGetCursorPos(device->window, &xpos, &ypos);
-        switch (state->bPressed)
-        {
-        case false:
-            state->bPressed = true;
-            state->xpos     = xpos;
-            state->ypos     = ypos;
-            break;
-        case true:
-        {
-            double delX = xpos - state->xpos;
-            double delY = ypos - state->ypos;
-            device->graph->center.x += delX;
-            device->graph->center.y -= delY;
-
-            // Now shift all the plotted points
-            for (int pt = 0; pt < device->render_scene->vCount; ++pt)
-            {
-            }
-            state->xpos = xpos;
-            state->ypos = ypos;
-        }
-        break;
-        default:
-            TriggerBreakpoint();
-        }
-    }
-    else
-        state->bPressed = false;
 }
 
 void MorphDestroyDevice(MorphPlotDevice *device)

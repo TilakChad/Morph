@@ -1,4 +1,5 @@
 #include "../include/Morph.h"
+#include <math.h>
 
 double what(double x)
 {
@@ -8,7 +9,9 @@ double what(double x)
 int main()
 {
     MorphPlotDevice device = MorphCreateDevice();
-    MorphPlotFunc(&device, what, 0.0f, 0.0f, 1.0f, "sqrt");
+    MorphPlotFunc(&device, what, 0.0f, 0.0f, 1.0f, "x^3");
+    MorphPlotFunc(&device, sqrt, 0.0f, 1.0f, 1.0f, "sqrt");
+
     MorphShow(&device);
     return 0;
 }
