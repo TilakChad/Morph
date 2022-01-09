@@ -4,7 +4,7 @@
 #include <GLFW/glfw3.h>
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "../include/Morph.h"
+#include "./Morph.h"
 
 
 #ifdef _WIN32

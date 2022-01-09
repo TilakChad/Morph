@@ -1,4 +1,6 @@
-#include "../include/Morph.h"
+#define _CRT_SECURE_NO_WARNINGS
+
+#include "./Morph.h"
 #include <math.h>
 
 double what(double x)
