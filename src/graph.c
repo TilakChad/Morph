@@ -11,9 +11,8 @@ double what(double x)
 int main()
 {
     MorphPlotDevice device = MorphCreateDevice();
-    MorphPlotFunc(&device, what, 0.0f, 0.0f, 1.0f, "x^3");
-    MorphPlotFunc(&device, sqrt, 0.0f, 1.0f, 1.0f, "sqrt");
-
+    MorphPlotFunc(&device, what, 0.0f, 0.0f, 1.0f,-10.0f,10.0f, "x^3",0.0f);
+    MorphPlotFunc(&device, sqrt, 0.0f, 1.0f, 1.0f,0.0f,200.0f, "sqrt",10.0f);
     MorphShow(&device);
     return 0;
 }

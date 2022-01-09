@@ -29,4 +29,4 @@ void        MorphShow(MorphPlotDevice* device);
 void        MorphDestroyDevice(MorphPlotDevice *device);
 void        MorphAddList(MorphPlotDevice *device, float *xpts, float *ypts, int length, float r, float g, float b,
                          const char *cstronly);
-void        MorphPlotFunc(MorphPlotDevice *device, oneparamfn fn, float r, float g, float b, const char *cstronly);
+void        MorphPlotFunc(MorphPlotDevice *device, oneparamfn fn, float r, float g, float b, float xinit, float xend, const char *cstronly, float step);

@@ -5781,6 +5781,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <assert.h>
 #include <math.h>
+#include <float.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -6223,11 +6224,11 @@ struct RenderScene
     Vec2 *fVertices;
 
     // Now multiple plotting.. we need to setup break point somewhere
-    uint32_t    cMaxGraph;
-    uint32_t    graphbreak[10]; // returns indices to break at
-    uint32_t    graphcount;
-    Vec3        graphcolor[10];
-    const char *graphname[10];
+    uint32_t     cMaxGraph;
+    uint32_t     graphcount;
+    uint32_t*    graphbreak; // returns indices to break at
+    Vec3*        graphcolor;
+    const char** graphname;
 };
 
 typedef struct
@@ -6309,14 +6310,18 @@ void DestroyRenderScene(RenderScene *render_scene)
 void InitRenderScene(RenderScene *scene_group)
 {
     memset(scene_group, 0, sizeof(*scene_group));
-    scene_group->iMax          = 500;
-    scene_group->vMax          = 5000;
-    scene_group->dMax          = 500;
+    scene_group->iMax          = 5000;
+    scene_group->vMax          = 20000;
+    scene_group->dMax          = 1000;
+    scene_group->cMaxGraph      = 100;
 
     scene_group->Indices       = malloc(sizeof(*scene_group->Indices) * scene_group->iMax);
     scene_group->Vertices      = malloc(sizeof(*scene_group->Vertices) * scene_group->vMax);
     scene_group->Discontinuity = malloc(sizeof(*scene_group->Discontinuity) * scene_group->dMax);
     scene_group->Points        = malloc(sizeof(*scene_group->Vertices) * scene_group->vMax);
+    scene_group->graphbreak    = malloc(sizeof(*scene_group->graphbreak) * scene_group->cMaxGraph);
+    scene_group->graphname     = malloc(sizeof(*scene_group->graphname) * scene_group->cMaxGraph);
+    scene_group->graphcolor    = malloc(sizeof(*scene_group->graphcolor) * scene_group->cMaxGraph);
 
     const int maxFontVertices  = 10000; // will render 10000/6 fonts only
     scene_group->fVertices     = malloc(sizeof(*scene_group->fVertices) * maxFontVertices);
@@ -6418,7 +6423,7 @@ void PlotGraph(RenderScene *scene_group, oneparamfn func, Graph *graph, Vec3 col
         vec1 = vec2;
     }
     // Add number of vertices in the current graph
-    assert(scene_group->graphcount < 10);
+    assert(scene_group->graphcount < scene_group->cMaxGraph);
     scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
     scene_group->graphcolor[scene_group->graphcount - 1] = color;
     scene_group->graphname[scene_group->graphcount - 1]  = legend; // only static strings are expected as of yet
@@ -6498,7 +6503,7 @@ void LoadFont(Font *font, const char *font_dir)
     stbtt_InitFont(&sfont, fontbuffer.data, 0);
 
     // Load the character's data from stb_truetype
-    float fontSize = 30;
+    float fontSize = 25;
     float scale    = stbtt_ScaleForPixelHeight(&sfont, fontSize);
     int   ascent, descent, baseline;
     stbtt_GetFontVMetrics(&sfont, &ascent, &descent, 0);
@@ -6737,7 +6742,7 @@ void DrawLegends(RenderScene *scene_group, Font *font, Graph *graph) // choose l
     AddSingleVertex(scene_group, (Vec2){pos.x - 10, pos.y - 20});
     AddSingleVertex(scene_group, (Vec2){screen_width, pos.y - 20});
 
-    assert(scene_group->graphcount < 10);
+    assert(scene_group->graphcount < scene_group->cMaxGraph);
     scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
     scene_group->graphcolor[scene_group->graphcount - 1] = (Vec3){0.5f, 0.5f, 0.5f};
     scene_group->graphname[scene_group->graphcount - 1]  = ""; // only static strings are expected as of yet
@@ -6754,7 +6759,7 @@ void ShowList(RenderScene *scene_group, Font *font, Graph *graph, float *x, floa
         AddSingleVertex(scene_group, vec);
     }
 
-    assert(scene_group->graphcount < 10);
+    assert(scene_group->graphcount < scene_group->cMaxGraph);
     scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
     scene_group->graphcolor[scene_group->graphcount - 1] = color;
     scene_group->graphname[scene_group->graphcount - 1]  = GiveOnlyStaticStrings;
@@ -6877,9 +6882,6 @@ void HandleEvents(GLFWwindow *window, State *state, Graph *graph)
             state->xpos = xpos;
             state->ypos = ypos;
         }
-        break;
-        default:
-            TriggerBreakpoint();
         }
     }
     else
@@ -6989,7 +6991,6 @@ MorphPlotDevice MorphCreateDevice()
     Font *         ComicSans = malloc(sizeof(*ComicSans));
     // LoadFont(ComicSans, "./include/comic.ttf");
     LoadSystemFont(ComicSans,"comic.ttf");
-    String str = MakeString("@ComicSans");
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -7000,11 +7001,18 @@ MorphPlotDevice MorphCreateDevice()
     return device;
 }
 
-void MorphPlotFunc(MorphPlotDevice *device, oneparamfn fn, float r, float g, float b, const char *cstronly)
+void MorphPlotFunc(MorphPlotDevice *device, oneparamfn fn, float r, float g, float b, float xstart, float xend, const char *cstronly, float samplesize)
 {
     float init = -10.0f;
     float term = 10.0f;
     float step = 0.05f;
+    if (fabsf(xstart - xend) > FLT_EPSILON)
+    {
+        init = xstart > xend ? xend   : xstart; 
+        term = xstart > xend ? xstart : xend;
+    }
+    if (samplesize > FLT_EPSILON)
+        step = samplesize;
     Vec2  vec;
 
     for (float x = init; x <= term; x += step)
@@ -7015,7 +7023,7 @@ void MorphPlotFunc(MorphPlotDevice *device, oneparamfn fn, float r, float g, flo
         AddSinglePoint(device->render_scene, vec);
     }
     // Add number of vertices in the current graph
-    assert(device->render_scene->graphcount < 10);
+    assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
     device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
     device->render_scene->graphcolor[device->render_scene->graphcount - 1] = (Vec3){r, g, b};
     device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
@@ -7030,10 +7038,9 @@ void APIReset(MorphPlotDevice *device, uint32_t hold)
 void MorphShow(MorphPlotDevice *device)
 {
     glfwShowWindow(device->window);
-    Mat4  scene_matrix = IdentityMatrix();
     State panner       = {0};
 
-    MorphPlotFunc(device, GaussianIntegral, 0.0f, 1.0f, 0.0f, "Gaussian");
+    MorphPlotFunc(device, GaussianIntegral, 0.0f, 1.0f, 0.0f,-5,5, "Gaussian",0.0f);
     // PlotGraph(device->render_scene, cos, device->graph, (Vec3){1.0f, 0.0f, 0.0f}, "cosine");
     // PlotGraph(device->render_scene, tanh, device->graph, (Vec3){1.0f, 0.0f, 1.0f}, "tanh");
     // RenderLabels(device->render_scene, device->font, device->graph, &scene_matrix);
