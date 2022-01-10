@@ -7090,19 +7090,14 @@ void MorphDestroyDevice(MorphPlotDevice *device)
     glfwTerminate();
 }
 
-void MorphAddList(MorphPlotDevice *device, float *xpts, float *ypts, int length, float r, float g, float b,
+void MorphPlotList(MorphPlotDevice *device, float *x, float *y, int length, float r, float g, float b,
                   const char *cstronly)
 {
-    Vec2 vec;
     for (int points = 0; points < length; ++points)
-    {
-        vec.x = device->graph->center.x + xpts[points] * device->graph->slide_scale.x / (device->graph->scale.x);
-        vec.y = device->graph->center.y + ypts[points] * device->graph->slide_scale.y / (device->graph->scale.y);
-        AddSingleVertex(device->render_scene, vec);
-    }
+        AddSinglePoint(device->render_scene, (Vec2){x[points],y[points]});
 
-    assert(device->render_scene->graphcount < 10);
-    device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->vCount;
+    assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
+    device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
     device->render_scene->graphcolor[device->render_scene->graphcount - 1] = (Vec3){r, g, b};
     device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
 }
