@@ -21,7 +21,7 @@
   <ItemGroup>
     <ClCompile Include="glad\src\glad.c" />
     <ClCompile Include="src\graph.c" />
-    <ClCompile Include="src\main.c" />
+    <ClCompile Include="src\Morph.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Morph.h" />
