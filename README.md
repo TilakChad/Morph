@@ -10,7 +10,7 @@ open(``Morph.sln``).then(``Ctrl+F5``)
 ## Linux Build 
 Just provide required glfw's *.c files to cc and some -I\* and -L\* things and it compiles. If not clear, wait for build.sh or cmakelists.txt file. 
 
-# Demo 
+# Demo -> Func Plot
 ```c
 #define _CRT_SECURE_NO_WARNINGS
 
@@ -36,3 +36,28 @@ int main()
 # Output 
 <p align="left">
   <img src="multigraph.png">
+
+# Demo -> List Plot 
+
+ ```c
+#include "./Morph.h"
+
+int main()
+{
+    MorphPlotDevice device = MorphCreateDevice();
+    
+    float x[] = {1, 3, 4, 6, 7};
+    float y[] = {3, -4, 3, -2, 0};
+    MorphPlotList(&device, x, y, 5, 0.3f, 0.2f, 0.9f, "MagicFunc");
+   
+    MorphShow(&device);
+    return 0;
+}
+```
+
+# Output 
+<p align="left">
+    <img src="listplot.png">
+
+    
+ 
