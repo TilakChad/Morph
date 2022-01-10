@@ -7051,11 +7051,6 @@ void MorphShow(MorphPlotDevice *device)
     glfwShowWindow(device->window);
     State panner       = {0};
 
-    MorphPlotFunc(device, GaussianIntegral, 0.0f, 1.0f, 0.0f,-5,5, "Gaussian",0.0f);
-    // PlotGraph(device->render_scene, cos, device->graph, (Vec3){1.0f, 0.0f, 0.0f}, "cosine");
-    // PlotGraph(device->render_scene, tanh, device->graph, (Vec3){1.0f, 0.0f, 1.0f}, "tanh");
-    // RenderLabels(device->render_scene, device->font, device->graph, &scene_matrix);
-
     uint32_t hold = device->render_scene->graphcount;
 
     while (!glfwWindowShouldClose(device->window))
