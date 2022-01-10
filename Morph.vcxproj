@@ -20,10 +20,15 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="glad\src\glad.c" />
+    <ClCompile Include="src\graph.c" />
     <ClCompile Include="src\main.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="maths\matrix.h" />
+    <ClInclude Include="src\Morph.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="include\text_fragment.glsl" />
+    <None Include="include\text_vertex.glsl" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
