@@ -6688,6 +6688,12 @@ void RenderLabels(RenderScene *scene_group, Font *font, Graph *graph, Mat4 *orth
         position.y = origin.y - font->height;
         // Now calculate the value at the position
 
+        // Clamp the value so that they remain inside the screen 
+        if (position.y < 0) 
+            position.y = font->height; 
+        else if (position.y > screen_height)
+            position.y = screen_height - font->height;
+
         float val   = i * graph->scale.x / 2;
         int   count = snprintf(NULL, 0, "%3g", val);
         snprintf(font->font_buffer, count + 1, "%3g", val);
@@ -6704,6 +6710,11 @@ void RenderLabels(RenderScene *scene_group, Font *font, Graph *graph, Mat4 *orth
             continue;
         position.x  = origin.x - font->height * 1.5f;
         position.y  = origin.y + y * graph->slide_scale.y / 2 - font->height / 2;
+
+        if (position.x < 0) 
+            position.x = font->height; 
+        else if (position.x > screen_width)
+            position.x = screen_width - font->height;
 
         float val   = y * graph->scale.y / 2;
         int   count = snprintf(NULL, 0, "%3g", val);
