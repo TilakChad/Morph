@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+gcc -std=c11 ./src/graph.c ./src/Morph.c -I./glad/include -I./GLFW/include ./glad/src/glad.c ./GLFW/src/context.c -D_GLFW_X11 ./GLFW/src/window.c ./GLFW/src/init.c ./GLFW/src/input.c ./GLFW/src/posix_thread.c ./GLFW/src/x11_window.c ./GLFW/src/x11_monitor.c ./GLFW/src/vulkan.c ./GLFW/src/monitor.c ./GLFW/src/x11_init.c ./GLFW/src/posix_time.c ./GLFW/src/linux_joystick.c ./GLFW/src/glx_context.c ./GLFW/src/egl_context.c ./GLFW/src/osmesa_context.c ./GLFW/src/xkb_unicode.c -pthread -ldl -lX11 -lm -o morph

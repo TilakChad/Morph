@@ -1,4 +1,5 @@
 #define _CRT_SECURE_NO_WARNINGS
+#define _GNU_SOURCE
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -6605,13 +6606,25 @@ void LoadSystemFont(Font *font, const char *font_name)
 {
     char           font_path[512] = {0};
 
-    #ifdef _WIN32
+
+#ifdef _WIN32
     strcpy(font_path, getenv("WINDIR"));
     strcat(font_path, "\\Fonts\\");
     strcat(font_path,font_name);
-    #elif defined(__linux__)
-    // do something here
-    #endif 
+
+#elif defined(__linux__)
+    char shell_command[512] = "fc-match --format=%{file} ";
+    strcat(shell_command,font_name);
+    FILE* sh = popen(shell_command,"r");
+    if(!sh)
+    {
+        fprintf(stderr,"Failed to load font %s.",font_name);
+        return ;
+    }
+    // No safety checks
+    fread(font_path,sizeof(unsigned char),512,sh);
+    pclose(sh);
+#endif 
     LoadFont(font,font_path);
 }
 
