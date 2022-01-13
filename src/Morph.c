@@ -7,7 +7,6 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "./Morph.h"
 
-
 #ifdef _WIN32
 #include <Windows.h>
 #elif defined(__linux__)
@@ -567,8 +566,8 @@ extern "C"
 
     STBTT_DEF void stbtt_GetBakedQuad(const stbtt_bakedchar *chardata, int pw, int ph, // same data as above
                                       int                 char_index,                  // character to display
-                                      float *             xpos,
-                                      float *             ypos, // pointers to current position in screen pixel space
+                                      float              *xpos,
+                                      float              *ypos, // pointers to current position in screen pixel space
                                       stbtt_aligned_quad *q,    // output: quad to draw
                                       int opengl_fillrule);     // true if opengl fill rule; false if DX9 or earlier
     // Call GetBakedQuad with char_index = 'character - first_char', and it
@@ -643,7 +642,7 @@ extern "C"
         float font_size;
         int   first_unicode_codepoint_in_range; // if non-zero, then the chars are continuous, and this is the first
                                                 // codepoint
-        int *             array_of_unicode_codepoints; // if non-zero, then this is an array of unicode codepoints
+        int              *array_of_unicode_codepoints; // if non-zero, then this is an array of unicode codepoints
         int               num_chars;
         stbtt_packedchar *chardata_for_range;         // output
         unsigned char     h_oversample, v_oversample; // don't set these, they're used internally
@@ -681,8 +680,8 @@ extern "C"
 
     STBTT_DEF void stbtt_GetPackedQuad(const stbtt_packedchar *chardata, int pw, int ph, // same data as above
                                        int                 char_index,                   // character to display
-                                       float *             xpos,
-                                       float *             ypos, // pointers to current position in screen pixel space
+                                       float              *xpos,
+                                       float              *ypos, // pointers to current position in screen pixel space
                                        stbtt_aligned_quad *q,    // output: quad to draw
                                        int                 align_to_integer);
 
@@ -705,8 +704,8 @@ extern "C"
     // all the context needed from PackBegin to PackEnd.
     struct stbtt_pack_context
     {
-        void *         user_allocator_context;
-        void *         pack_info;
+        void          *user_allocator_context;
+        void          *pack_info;
         int            width;
         int            height;
         int            stride_in_bytes;
@@ -714,7 +713,7 @@ extern "C"
         int            skip_missing;
         unsigned int   h_oversample, v_oversample;
         unsigned char *pixels;
-        void *         nodes;
+        void          *nodes;
     };
 
     //////////////////////////////////////////////////////////////////////////////
@@ -741,7 +740,7 @@ extern "C"
     // the stack or as a global or etc, but you should treat it as opaque.
     struct stbtt_fontinfo
     {
-        void *         userdata;
+        void          *userdata;
         unsigned char *data;      // pointer to .ttf file
         int            fontstart; // offset of start of font
 
@@ -985,7 +984,7 @@ extern "C"
     // rasterize a shape with quadratic beziers into a bitmap
     STBTT_DEF void stbtt_Rasterize(stbtt__bitmap *result,             // 1-channel bitmap to draw into
                                    float          flatness_in_pixels, // allowable error of curve in pixels
-                                   stbtt_vertex * vertices,           // array of vertices defining shape
+                                   stbtt_vertex  *vertices,           // array of vertices defining shape
                                    int            num_verts,          // number of vertices in above array
                                    float scale_x, float scale_y,      // scale applied to input vertices
                                    float shift_x, float shift_y,      // translation applied to input vertices
@@ -1842,8 +1841,8 @@ static int stbtt__close_shape(stbtt_vertex *vertices, int num_vertices, int was_
 static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo *info, int glyph_index, stbtt_vertex **pvertices)
 {
     stbtt_int16   numberOfContours;
-    stbtt_uint8 * endPtsOfContours;
-    stbtt_uint8 * data         = info->data;
+    stbtt_uint8  *endPtsOfContours;
+    stbtt_uint8  *data         = info->data;
     stbtt_vertex *vertices     = 0;
     int           num_vertices = 0;
     int           g            = stbtt__GetGlyfOffset(info, glyph_index);
@@ -2085,7 +2084,7 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo *info, int glyph_index, s
                 // Transform vertices.
                 for (i = 0; i < comp_num_verts; ++i)
                 {
-                    stbtt_vertex *    v = &comp_verts[i];
+                    stbtt_vertex     *v = &comp_verts[i];
                     stbtt_vertex_type x, y;
                     x     = v->x;
                     y     = v->y;
@@ -3133,7 +3132,7 @@ typedef struct stbtt__hheap_chunk
 typedef struct stbtt__hheap
 {
     struct stbtt__hheap_chunk *head;
-    void *                     first_free;
+    void                      *first_free;
     int                        num_remaining_in_head_chunk;
 } stbtt__hheap;
 
@@ -4210,7 +4209,7 @@ STBTT_DEF void stbtt_Rasterize(stbtt__bitmap *result, float flatness_in_pixels, 
 {
     float         scale           = scale_x > scale_y ? scale_y : scale_x;
     int           winding_count   = 0;
-    int *         winding_lengths = NULL;
+    int          *winding_lengths = NULL;
     stbtt__point *windings = stbtt_FlattenCurves(vertices, num_verts, flatness_in_pixels / scale, &winding_lengths,
                                                  &winding_count, userdata);
     if (windings)
@@ -4511,7 +4510,7 @@ STBTT_DEF int stbtt_PackBegin(stbtt_pack_context *spc, unsigned char *pixels, in
 {
     stbrp_context *context   = (stbrp_context *)STBTT_malloc(sizeof(*context), alloc_context);
     int            num_nodes = pw - padding;
-    stbrp_node *   nodes     = (stbrp_node *)STBTT_malloc(sizeof(*nodes) * num_nodes, alloc_context);
+    stbrp_node    *nodes     = (stbrp_node *)STBTT_malloc(sizeof(*nodes) * num_nodes, alloc_context);
 
     if (context == NULL || nodes == NULL)
     {
@@ -5216,7 +5215,7 @@ STBTT_DEF unsigned char *stbtt_GetGlyphSDF(const stbtt_fontinfo *info, float sca
 
     {
         int           x, y, i, j;
-        float *       precompute;
+        float        *precompute;
         stbtt_vertex *verts;
         int           num_verts = stbtt_GetGlyphShape(info, glyph, &verts);
         data                    = (unsigned char *)STBTT_malloc(w * h, info->userdata);
@@ -5781,8 +5780,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
 #include <assert.h>
-#include <math.h>
 #include <float.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -5914,20 +5913,7 @@ static Mat4 IdentityMatrix()
 }
 
 static int screen_width  = 800;
-static int screen_height = 800;
-
-typedef struct Vec2
-{
-    float x;
-    float y;
-} Vec2;
-
-typedef struct Vec3
-{
-    float x;
-    float y;
-    float z;
-} Vec3;
+static int screen_height = 600;
 
 struct Graph
 {
@@ -5937,21 +5923,21 @@ struct Graph
     float        width;
     float        value;
 
-    Vec2         center;
-    Vec2         scale;
+    MVec2        center;
+    MVec2        scale;
 
-    Vec2         slide_scale; // Controls the major scaling on the axes of the graph
+    MVec2        slide_scale; // Controls the major scaling on the axes of the graph
 };
 
 typedef struct
 {
-    Mat4 * OrthoMatrix;
+    Mat4  *OrthoMatrix;
     Graph *graph;
 } UserData;
 
 typedef struct
 {
-    char * data;
+    char  *data;
     size_t length;
 } String;
 
@@ -6023,8 +6009,8 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
     const float origin = 200.0f;
     const float scale  = 5.0f;
 
-    UserData *  data   = glfwGetWindowUserPointer(window);
-    Graph *     graph  = data->graph;
+    UserData   *data   = glfwGetWindowUserPointer(window);
+    Graph      *graph  = data->graph;
 
     // capture mouse co-ordinates here
     double xPos, yPos;
@@ -6066,7 +6052,7 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
             graph->scale.x = MagicNumberGenerator(--absScale);
             graph->scale.y = graph->scale.x;
         }
-        graph->slide_scale = (Vec2){origin, origin};
+        graph->slide_scale = (MVec2){origin, origin};
     }
     // Now shift the origin to somewhere else .. don't know where yet
     // Its awkard to do these kinda stuffs without matrix .. haha
@@ -6216,30 +6202,30 @@ struct RenderScene
 
     uint32_t *Indices;
     uint32_t *Discontinuity;
-    Vec2 *    Vertices;
-    Vec2 *    Points;
+    MVec2    *Vertices;
+    MVec2    *Points;
 
     // Need support for font rendering here
     uint32_t fCount; // This might seem inconsistent but whatever
-    // Each fCount will have 6 vertices with each vertex having 4 floats or 2 vec2's
-    Vec2 *fVertices;
+    // Each fCount will have 6 vertices with each vertex having 4 floats or 2 MVec2's
+    MVec2 *fVertices;
 
     // Now multiple plotting.. we need to setup break point somewhere
     uint32_t     cMaxGraph;
     uint32_t     graphcount;
-    uint32_t*    graphbreak; // returns indices to break at
-    Vec3*        graphcolor;
-    const char** graphname;
+    uint32_t    *graphbreak; // returns indices to break at
+    MVec3       *graphcolor;
+    const char **graphname;
 };
 
-typedef struct
+struct State
 {
     bool   bPressed;
     double xpos;
     double ypos;
-} State;
+};
 
-typedef Vec2 (*parametricfn)(double);
+typedef MVec2 (*parametricfn)(double);
 
 void InitGraph(Graph *graph)
 {
@@ -6279,12 +6265,12 @@ void InitGraph(Graph *graph)
 
     graph->program = LoadProgram(vertex, fragment);
 
-    graph->center  = (Vec2){400.0f, 400.0f};
+    graph->center  = (MVec2){400.0f, 400.0f};
 
     // Make graph->scale use value instead of pixel scale
-    graph->scale       = (Vec2){1.0f, 1.0f};
+    graph->scale       = (MVec2){1.0f, 1.0f};
 
-    graph->slide_scale = (Vec2){200.0f, 200.0f};
+    graph->slide_scale = (MVec2){200.0f, 200.0f};
 }
 
 void RenderGraph(Graph *graph)
@@ -6314,7 +6300,7 @@ void InitRenderScene(RenderScene *scene_group)
     scene_group->iMax          = 5000;
     scene_group->vMax          = 20000;
     scene_group->dMax          = 1000;
-    scene_group->cMaxGraph      = 100;
+    scene_group->cMaxGraph     = 100;
 
     scene_group->Indices       = malloc(sizeof(*scene_group->Indices) * scene_group->iMax);
     scene_group->Vertices      = malloc(sizeof(*scene_group->Vertices) * scene_group->vMax);
@@ -6328,14 +6314,14 @@ void InitRenderScene(RenderScene *scene_group)
     scene_group->fVertices     = malloc(sizeof(*scene_group->fVertices) * maxFontVertices);
 }
 
-void AddSingleVertex(RenderScene *scene_group, Vec2 vertex)
+void AddSingleVertex(RenderScene *scene_group, MVec2 vertex)
 {
     // TODO :: Remove this bound check .. Expensiiiivvve
     assert(scene_group->vCount + 1 <= scene_group->vMax);
     scene_group->Vertices[scene_group->vCount++] = vertex;
 }
 
-void AddSinglePoint(RenderScene *scene_group, Vec2 vertex)
+void AddSinglePoint(RenderScene *scene_group, MVec2 vertex)
 {
     assert(scene_group->pCount + 1 <= scene_group->vMax);
     scene_group->Points[scene_group->pCount++] = vertex;
@@ -6343,7 +6329,7 @@ void AddSinglePoint(RenderScene *scene_group, Vec2 vertex)
 
 void RenderRenderScene(RenderScene *scene_group, unsigned int program, bool showPoints)
 {
-    glLineWidth(4);
+    glLineWidth(6);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(*scene_group->Vertices) * scene_group->vCount, scene_group->Vertices);
 
     // Plot everything in the way
@@ -6353,7 +6339,7 @@ void RenderRenderScene(RenderScene *scene_group, unsigned int program, bool show
     int vertices = 0;
     for (int graph_c = 0; graph_c < scene_group->graphcount; ++graph_c)
     {
-        Vec3 inColor = scene_group->graphcolor[graph_c];
+        MVec3 inColor = scene_group->graphcolor[graph_c];
         glUniform3f(glGetUniformLocation(program, "inColor"), inColor.x, inColor.y, inColor.z);
         int discontinuous = 0;
         for (int i = vertices; i < (int32_t)scene_group->dCount - 1; ++i)
@@ -6395,9 +6381,9 @@ void ResetRenderScene(RenderScene *scene_group)
     scene_group->graphcount = 0;
 }
 
-void PlotGraph(RenderScene *scene_group, oneparamfn func, Graph *graph, Vec3 color, const char *legend)
+static void PlotGraph(RenderScene *scene_group, ParametricFn1D func, Graph *graph, MVec3 color, const char *legend)
 {
-    Vec2  vec1, vec2;
+    MVec2 vec1, MVec2;
 
     float step = 0.02f;
     float init = -10.0f;
@@ -6409,11 +6395,11 @@ void PlotGraph(RenderScene *scene_group, oneparamfn func, Graph *graph, Vec3 col
     for (float x = init; x <= term; x += step)
     {
         // Check for discontinuity of the function
-        vec2.x = graph->center.x + (x + step) * graph->slide_scale.x / (graph->scale.x);
-        vec2.y = graph->center.y + func(x + step) * graph->slide_scale.y / (graph->scale.y);
+        MVec2.x = graph->center.x + (x + step) * graph->slide_scale.x / (graph->scale.x);
+        MVec2.y = graph->center.y + func(x + step) * graph->slide_scale.y / (graph->scale.y);
 
         AddSingleVertex(scene_group, vec1);
-        float slope = atan(fabs((vec2.y - vec1.y) / (vec2.x - vec1.x)));
+        float slope = atan(fabs((MVec2.y - vec1.y) / (MVec2.x - vec1.x)));
         if (slope > 1.57f)
         {
             // mark current point as discontinuity
@@ -6421,7 +6407,7 @@ void PlotGraph(RenderScene *scene_group, oneparamfn func, Graph *graph, Vec3 col
             scene_group->Discontinuity[scene_group->dCount++] = scene_group->vCount;
             // fprintf(stderr, "Point of discontinuity for inverse function is at %f.\n", slope);
         }
-        vec1 = vec2;
+        vec1 = MVec2;
     }
     // Add number of vertices in the current graph
     assert(scene_group->graphcount < scene_group->cMaxGraph);
@@ -6430,19 +6416,9 @@ void PlotGraph(RenderScene *scene_group, oneparamfn func, Graph *graph, Vec3 col
     scene_group->graphname[scene_group->graphcount - 1]  = legend; // only static strings are expected as of yet
 }
 
-Vec2 RoseCurves(double x)
-{
-    int   k = 10;
-    int   a = 2;
-    float r = a * cos(k * x);
-    return (Vec2){.x = r * cos(x), .y = r * sin(x)};
-}
-
-// TODO :: Turn on anit-aliasing
-
 void PlotParametric(RenderScene *scene_group, parametricfn func, Graph *graph)
 {
-    Vec2 vec;
+    MVec2 vec;
     for (float i = -3.141592f * 2; i <= 3.141592f * 2; i += 0.04f)
     {
         vec   = func(i);
@@ -6456,10 +6432,10 @@ void HandleEvents(GLFWwindow *window, State *state, Graph *graph);
 
 typedef struct Glyph
 {
-    Vec2 offset;
-    Vec2 size;
-    Vec2 bearing;
-    int  Advance;
+    MVec2 offset;
+    MVec2 size;
+    MVec2 bearing;
+    int   Advance;
 } Glyph;
 
 typedef struct Font
@@ -6547,8 +6523,8 @@ void LoadFont(Font *font, const char *font_dir)
                                           0, ch);
 
         Glyph *glyph   = &font->character[ch];
-        glyph->offset  = (Vec2){(int)xpos, 0};
-        glyph->size    = (Vec2){x1 - x0, y1 - y0};
+        glyph->offset  = (MVec2){(int)xpos, 0};
+        glyph->size    = (MVec2){x1 - x0, y1 - y0};
         glyph->Advance = (int)(advance * scale);
         xpos += advance * scale;
     }
@@ -6601,35 +6577,34 @@ void LoadFont(Font *font, const char *font_dir)
     font->program = LoadProgram(font_vertex, font_fragment);
 }
 
-// only font name .. not the whole path 
+// only font name .. not the whole path
 void LoadSystemFont(Font *font, const char *font_name)
 {
-    char           font_path[512] = {0};
-
+    char font_path[512] = {0};
 
 #ifdef _WIN32
     strcpy(font_path, getenv("WINDIR"));
     strcat(font_path, "\\Fonts\\");
-    strcat(font_path,font_name);
+    strcat(font_path, font_name);
 
 #elif defined(__linux__)
     char shell_command[512] = "fc-match --format=%{file} ";
-    strcat(shell_command,font_name);
-    FILE* sh = popen(shell_command,"r");
-    if(!sh)
+    strcat(shell_command, font_name);
+    FILE *sh = popen(shell_command, "r");
+    if (!sh)
     {
-        fprintf(stderr,"Failed to load font %s.",font_name);
-        return ;
+        fprintf(stderr, "Failed to load font %s.", font_name);
+        return;
     }
     // No safety checks
-    fread(font_path,sizeof(unsigned char),512,sh);
+    fread(font_path, sizeof(unsigned char), 512, sh);
     pclose(sh);
-#endif 
-    LoadFont(font,font_path);
+#endif
+    LoadFont(font, font_path);
 }
 
 // position in pixel where (0,0) is the lower left corner of the screen
-void FillText(RenderScene *scene_group, Font *font, Vec2 position, String str, int scale)
+void FillText(RenderScene *scene_group, Font *font, MVec2 position, String str, int scale)
 {
     // its quite straightforward
     int32_t x = position.x;
@@ -6647,24 +6622,24 @@ void FillText(RenderScene *scene_group, Font *font, Vec2 position, String str, i
         tex0        = glyph.offset.x / font->width;
         tex1        = (glyph.offset.x + w) / font->width;
         // lower left corner
-        scene_group->fVertices[count * 12 + 0] = (Vec2){x, y};
-        scene_group->fVertices[count * 12 + 1] = (Vec2){tex0, 1.0f};
+        scene_group->fVertices[count * 12 + 0] = (MVec2){x, y};
+        scene_group->fVertices[count * 12 + 1] = (MVec2){tex0, 1.0f};
         // upper left corner
-        scene_group->fVertices[count * 12 + 2] = (Vec2){x, y + h};
-        scene_group->fVertices[count * 12 + 3] = (Vec2){tex0, 0.0f};
+        scene_group->fVertices[count * 12 + 2] = (MVec2){x, y + h};
+        scene_group->fVertices[count * 12 + 3] = (MVec2){tex0, 0.0f};
         // upper right corner
-        scene_group->fVertices[count * 12 + 4] = (Vec2){x + w, y + h};
-        scene_group->fVertices[count * 12 + 5] = (Vec2){tex1, 0.0f};
+        scene_group->fVertices[count * 12 + 4] = (MVec2){x + w, y + h};
+        scene_group->fVertices[count * 12 + 5] = (MVec2){tex1, 0.0f};
         // lower left corner
-        scene_group->fVertices[count * 12 + 6] = (Vec2){x + w, y};
-        scene_group->fVertices[count * 12 + 7] = (Vec2){tex1, 1.0f};
+        scene_group->fVertices[count * 12 + 6] = (MVec2){x + w, y};
+        scene_group->fVertices[count * 12 + 7] = (MVec2){tex1, 1.0f};
         // duplicate lower left and upper right
         // upper right corner
-        scene_group->fVertices[count * 12 + 8] = (Vec2){x + w, y + h};
-        scene_group->fVertices[count * 12 + 9] = (Vec2){tex1, 0.0f};
+        scene_group->fVertices[count * 12 + 8] = (MVec2){x + w, y + h};
+        scene_group->fVertices[count * 12 + 9] = (MVec2){tex1, 0.0f};
         // lower left corner
-        scene_group->fVertices[count * 12 + 10] = (Vec2){x, y};
-        scene_group->fVertices[count * 12 + 11] = (Vec2){tex0, 1.0f};
+        scene_group->fVertices[count * 12 + 10] = (MVec2){x, y};
+        scene_group->fVertices[count * 12 + 11] = (MVec2){tex0, 1.0f};
 
         x                                       = x + glyph.Advance;
         scene_group->fCount += 1;
@@ -6680,7 +6655,7 @@ void RenderFont(RenderScene *scene_group, Font *font, Mat4 *scene_transform)
     glBindTexture(GL_TEXTURE_2D, font->font_texture);
 
     glBindBuffer(GL_ARRAY_BUFFER, font->vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, scene_group->fCount * 12 * sizeof(Vec2), scene_group->fVertices);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, scene_group->fCount * 12 * sizeof(MVec2), scene_group->fVertices);
     glDrawArrays(GL_TRIANGLES, 0, scene_group->fCount * 6);
     glBindVertexArray(0);
     glUseProgram(0);
@@ -6688,8 +6663,8 @@ void RenderFont(RenderScene *scene_group, Font *font, Mat4 *scene_transform)
 
 void RenderLabels(RenderScene *scene_group, Font *font, Graph *graph, Mat4 *orthoMatrix)
 {
-    Vec2 origin = graph->center;
-    Vec2 position;
+    MVec2 origin = graph->center;
+    MVec2 position;
 
     // Calculate the min and max vertical bar visible on the current frame first
     int xLow  = -origin.x / graph->slide_scale.x - 1;
@@ -6701,9 +6676,9 @@ void RenderLabels(RenderScene *scene_group, Font *font, Graph *graph, Mat4 *orth
         position.y = origin.y - font->height;
         // Now calculate the value at the position
 
-        // Clamp the value so that they remain inside the screen 
-        if (position.y < 0) 
-            position.y = font->height; 
+        // Clamp the value so that they remain inside the screen
+        if (position.y < 0)
+            position.y = font->height;
         else if (position.y > screen_height)
             position.y = screen_height - font->height;
 
@@ -6721,11 +6696,11 @@ void RenderLabels(RenderScene *scene_group, Font *font, Graph *graph, Mat4 *orth
     {
         if (y == 0)
             continue;
-        position.x  = origin.x - font->height * 1.5f;
-        position.y  = origin.y + y * graph->slide_scale.y / 2 - font->height / 2;
+        position.x = origin.x - font->height * 1.5f;
+        position.y = origin.y + y * graph->slide_scale.y / 2 - font->height / 2;
 
-        if (position.x < 0) 
-            position.x = font->height; 
+        if (position.x < 0)
+            position.x = font->height;
         else if (position.x > screen_width)
             position.x = screen_width - font->height;
 
@@ -6743,7 +6718,7 @@ void DrawLegends(RenderScene *scene_group, Font *font, Graph *graph) // choose l
     // Draw a small rectangle filled with that color -> Might need a new pixel shader -> Used simple line instead
     // Finally draw text with plot name -> Already available
     // Find the appropriate place to put the legend
-    Vec2 pos   = {0};
+    MVec2 pos  = {0};
     pos.x      = screen_width - 200;
     pos.y      = screen_height - font->height;
 
@@ -6752,30 +6727,30 @@ void DrawLegends(RenderScene *scene_group, Font *font, Graph *graph) // choose l
     {
         // Add a line indicator with given color for legends
         AddSingleVertex(scene_group, pos);
-        AddSingleVertex(scene_group, (Vec2){pos.x + 50, pos.y});
+        AddSingleVertex(scene_group, (MVec2){pos.x + 50, pos.y});
         scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
         scene_group->graphcolor[scene_group->graphcount - 1] = scene_group->graphcolor[label];
-        FillText(scene_group, font, (Vec2){pos.x + 75, pos.y - font->height / 2},
+        FillText(scene_group, font, (MVec2){pos.x + 75, pos.y - font->height / 2},
                  (String){.data = scene_group->graphname[label], .length = strlen(scene_group->graphname[label])}, 0);
 
         pos.y -= font->height;
     }
 
     // Add a graph break for a small box around legends
-    AddSingleVertex(scene_group, (Vec2){pos.x - 10, screen_height});
-    AddSingleVertex(scene_group, (Vec2){pos.x - 10, pos.y - 20});
-    AddSingleVertex(scene_group, (Vec2){screen_width, pos.y - 20});
+    AddSingleVertex(scene_group, (MVec2){pos.x - 10, screen_height});
+    AddSingleVertex(scene_group, (MVec2){pos.x - 10, pos.y - 20});
+    AddSingleVertex(scene_group, (MVec2){screen_width, pos.y - 20});
 
     assert(scene_group->graphcount < scene_group->cMaxGraph);
     scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
-    scene_group->graphcolor[scene_group->graphcount - 1] = (Vec3){0.5f, 0.5f, 0.5f};
+    scene_group->graphcolor[scene_group->graphcount - 1] = (MVec3){0.5f, 0.5f, 0.5f};
     scene_group->graphname[scene_group->graphcount - 1]  = ""; // only static strings are expected as of yet
 }
 
 void ShowList(RenderScene *scene_group, Font *font, Graph *graph, float *x, float *y, int length,
-              const char *GiveOnlyStaticStrings, Vec3 color)
+              const char *GiveOnlyStaticStrings, MVec3 color)
 {
-    Vec2 vec;
+    MVec2 vec;
     for (int points = 0; points < length; ++points)
     {
         vec.x = graph->center.x + x[points] * graph->slide_scale.x / (graph->scale.x);
@@ -6791,7 +6766,7 @@ void ShowList(RenderScene *scene_group, Font *font, Graph *graph, float *x, floa
 
 int nolongermain(int argc, char **argv)
 {
-    GLFWwindow * window   = LoadGLFW(screen_width, screen_height, "Graph FFI");
+    GLFWwindow  *window   = LoadGLFW(screen_width, screen_height, "Graph FFI");
     Shader       vertex   = LoadShader("./include/vertex.glsl", VERTEX_SHADER);
     Shader       fragment = LoadShader("./include/fragment.glsl", FRAGMENT_SHADER);
 
@@ -6852,13 +6827,13 @@ int nolongermain(int argc, char **argv)
         glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ResetRenderScene(&graph);
-        FillText(&graph, &ComicSans, (Vec2){50.0f, 50.0f}, str, 0);
+        FillText(&graph, &ComicSans, (MVec2){50.0f, 50.0f}, str, 0);
 
-        PlotGraph(&graph, sqrt, &graphs, (Vec3){0.0f, 0.0f, 1.0f}, "sqrt");
-        PlotGraph(&graph, GaussianIntegral, &graphs, (Vec3){0.0f, 1.0f, 0.0f}, "Gaussian");
-        // PlotGraph(&graph, cos, &graphs, (Vec3){1.0f, 0.0f, 0.0f}, "cosine");
-        PlotGraph(&graph, tanh, &graphs, (Vec3){1.0f, 0.0f, 1.0f}, "tanh");
-        ShowList(&graph, &ComicSans, &graphs, x, y, count, "List Plot", (Vec3){1.0f, 1.0f, 0.0f});
+        PlotGraph(&graph, sqrt, &graphs, (MVec3){0.0f, 0.0f, 1.0f}, "sqrt");
+        PlotGraph(&graph, GaussianIntegral, &graphs, (MVec3){0.0f, 1.0f, 0.0f}, "Gaussian");
+        // PlotGraph(&graph, cos, &graphs, (MVec3){1.0f, 0.0f, 0.0f}, "cosine");
+        PlotGraph(&graph, tanh, &graphs, (MVec3){1.0f, 0.0f, 1.0f}, "tanh");
+        ShowList(&graph, &ComicSans, &graphs, x, y, count, "List Plot", (MVec3){1.0f, 1.0f, 0.0f});
         RenderGraph(&graphs);
         RenderLabels(&graph, &ComicSans, &graphs, &scene_matrix);
         glUseProgram(program);
@@ -6918,7 +6893,7 @@ void HandleEvents(GLFWwindow *window, State *state, Graph *graph)
 void APIRecalculate(MorphPlotDevice *device)
 {
     device->render_scene->vCount = 0;
-    Vec2 vec;
+    MVec2 vec;
     for (int re = 0; re < device->render_scene->pCount; ++re)
     {
         vec.x = device->graph->center.x +
@@ -7010,11 +6985,12 @@ MorphPlotDevice MorphCreateDevice()
     *data          = (UserData){.OrthoMatrix = ortho_matrix, .graph = graph};
     glfwSetWindowUserPointer(device.window, data);
 
-    State          panner    = {0};
+    device.panner = malloc(sizeof(*device.panner));
+    memset(device.panner,0,sizeof(*device.panner));
 
-    Font *         ComicSans = malloc(sizeof(*ComicSans));
+    Font *ComicSans = malloc(sizeof(*ComicSans));
     // LoadFont(ComicSans, "./include/comic.ttf");
-    LoadSystemFont(ComicSans,"comic.ttf");
+    LoadSystemFont(ComicSans, "comic.ttf");
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -7022,22 +6998,34 @@ MorphPlotDevice MorphCreateDevice()
     device.graph        = graph;
     device.font         = ComicSans;
     device.transform    = ortho_matrix;
+
+// Initialize timer here
+#ifdef _WIN32
+    LARGE_INTEGER frequency, counter;
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&counter);
+    device.timer.count     = counter.QuadPart;
+    device.timer.frequency = frequency.QuadPart;
+#endif
+
+    device.should_close = false;
     return device;
 }
 
-void MorphPlotFunc(MorphPlotDevice *device, oneparamfn fn, float r, float g, float b, float xstart, float xend, const char *cstronly, float samplesize)
+void MorphPlotFunc(MorphPlotDevice *device, ParametricFn1D fn, MVec3 rgb, float xstart, float xend,
+                   const char *cstronly, float samplesize)
 {
     float init = -10.0f;
     float term = 10.0f;
     float step = 0.05f;
     if (fabsf(xstart - xend) > FLT_EPSILON)
     {
-        init = xstart > xend ? xend   : xstart; 
+        init = xstart > xend ? xend : xstart;
         term = xstart > xend ? xstart : xend;
     }
     if (samplesize > FLT_EPSILON)
         step = samplesize;
-    Vec2  vec;
+    MVec2 vec;
 
     for (float x = init; x <= term; x += step)
     {
@@ -7049,8 +7037,31 @@ void MorphPlotFunc(MorphPlotDevice *device, oneparamfn fn, float r, float g, flo
     // Add number of vertices in the current graph
     assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
     device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
-    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = (Vec3){r, g, b};
+    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = rgb;
     device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
+}
+
+void MorphParametric2DPlot(MorphPlotDevice *device, ParametricFn2D fn, float tInit, float tTerm, MVec3 rgb,
+                           const char *cstronly, float step)
+{
+    MVec2 vec;
+    for (float t = tInit; t <= tTerm; t += step)
+        AddSinglePoint(device->render_scene, fn(t));
+    assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
+    device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
+    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = rgb;
+    device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
+}
+
+double MorphTimeSinceCreation(MorphPlotDevice *device)
+{
+    double elapsed_time = 0;
+#ifdef _WIN32
+    LARGE_INTEGER counter;
+    QueryPerformanceCounter(&counter);
+    elapsed_time = (((uint64_t)counter.QuadPart - device->timer.count) * 1.0) / device->timer.frequency;
+#endif
+    return elapsed_time;
 }
 
 void APIReset(MorphPlotDevice *device, uint32_t hold)
@@ -7059,12 +7070,17 @@ void APIReset(MorphPlotDevice *device, uint32_t hold)
     device->render_scene->graphcount = hold;
 }
 
+bool MorphShouldWindowClose(MorphPlotDevice *device)
+{
+    return device->should_close;
+}
+
 void MorphShow(MorphPlotDevice *device)
 {
     glfwShowWindow(device->window);
-    State panner       = {0};
+    State    panner = {0};
 
-    uint32_t hold = device->render_scene->graphcount;
+    uint32_t hold   = device->render_scene->graphcount;
 
     while (!glfwWindowShouldClose(device->window))
     {
@@ -7090,27 +7106,64 @@ void MorphShow(MorphPlotDevice *device)
     }
 }
 
+void MorphPhantomShow(MorphPlotDevice *device)
+{
+    uint32_t hold = device->render_scene->graphcount;
+
+    glfwShowWindow(device->window);
+    glfwMakeContextCurrent(device->window);
+
+    glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    APIReset(device, hold);
+    APIRecalculate(device);
+    RenderGraph(device->graph);
+
+    glUseProgram(device->program);
+    glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE, &device->transform->elem[0][0]);
+    glBindVertexArray(device->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, device->vbo);
+
+    RenderLabels(device->render_scene, device->font, device->graph, device->transform);
+    DrawLegends(device->render_scene, device->font, device->graph);
+    RenderRenderScene(device->render_scene, device->program, false);
+    RenderFont(device->render_scene, device->font, device->transform);
+
+    glfwSwapBuffers(device->window);
+
+    HandleEvents(device->window,device->panner,device->graph);
+    glfwPollEvents();
+
+    device->render_scene->graphcount -= hold + 1;
+    device->should_close = glfwWindowShouldClose(device->window); 
+}
+
 void MorphDestroyDevice(MorphPlotDevice *device)
 {
+    DestroyRenderScene(device->render_scene);
     free(device->render_scene);
     UserData *data = glfwGetWindowUserPointer(device->window);
     free(data);
     free(device->transform);
     free(device->graph);
     free(device->font);
-    DestroyRenderScene(device->render_scene);
     glfwDestroyWindow(device->window);
     glfwTerminate();
 }
 
-void MorphPlotList(MorphPlotDevice *device, float *x, float *y, int length, float r, float g, float b,
-                  const char *cstronly)
+void MorphPlotList(MorphPlotDevice *device, float *x, float *y, int length, MVec3 rgb, const char *cstronly)
 {
     for (int points = 0; points < length; ++points)
-        AddSinglePoint(device->render_scene, (Vec2){x[points],y[points]});
+        AddSinglePoint(device->render_scene, (MVec2){x[points], y[points]});
 
     assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
     device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
-    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = (Vec3){r, g, b};
+    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = rgb;
     device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
+}
+
+void MorphResetPlotting(MorphPlotDevice *device)
+{
+    ResetRenderScene(device->render_scene);
 }
