@@ -1,7 +1,6 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #include "./Morph.h"
-#include <Windows.h>
 #include <math.h>
 
 double Heaviside(double x)
