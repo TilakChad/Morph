@@ -1,7 +1,6 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #include "./Morph.h"
-#include <Windows.h>
 #include <math.h>
 
 double Heaviside(double x)
@@ -11,8 +10,7 @@ double Heaviside(double x)
 
 static MVec2 RoseCurves(double t)
 {
-    // For function like these, partial application would've been sooo nicccee
-    // k -> 0 & a -> 1 for a circle
+
     int   k = 10;
     int   a = 5;
     float r = a * cos(k * t);
@@ -21,8 +19,7 @@ static MVec2 RoseCurves(double t)
 
 static MVec2 RoseCurvesCircleVersion(double t)
 {
-    // For function like these, partial application would've been nicccee
-    // k -> 0 & a -> 1 for a circle
+
     int   k = 0;
     int   a = 6;
     float r = a * cos(k * t);
@@ -38,49 +35,51 @@ static MVec2 Hypotrochoid(double theta)
     return vec;
 }
 
-int main()
+
+double expGamma(double t)
 {
-    MorphPlotDevice device = MorphCreateDevice();
+    return pow(t,  2.2);
+}
 
-    // Demo Animation of plotting hypotrochoid
-    float  t    = 0;
-    double now  = MorphTimeSinceCreation(&device);
-    double then = now;
+double linear(double t)
+{
+    return t; 
+}
 
-    // For circle drawing and line 
-    float  circle_x[50], circle_y[50];
-    int    count = 0;
-    float  line_x[5], line_y[5];
+MVec2 HypoDesmos(double t)
+{
+    float r = 54; 
+    float R = 140; 
+    float o = 0.6f; 
+    float d = o*r; 
+    MVec2 vec; 
+    vec.x = 0.1f * ((R - r) * cos(t) + d * cos ((R-r)/r * t));
+    vec.y = 0.1f * ((R - r) * sin(t) - d * sin((R - r) / r * t));
+    return vec; 
+}
 
-    MVec2  temp;        now = MorphTimeSinceCreation(&device);
-    then = now; 
-    while (!MorphShouldWindowClose(&device) && (then - now) < 20.0f)
+MVec2 intcurve(double t)
+{
+    return (MVec2){t - 1.6 * cos(24 * t), t - 1.6 * sin(25 * t)};
+}
+
+int main() 
+{
+    MorphPlotDevice device = MorphCreateDevice(); 
+    double          now    = MorphTimeSinceCreation(&device); 
+    double          then   = now; 
+    float           step   = 1; 
+    float           total  = -3.0f;
+    while (!MorphShouldWindowClose(&device))
     {
-        count   = 0;
-        float t = then - now;
-        for (int i = 0; i <= 360 + 15; i += 15)
-        {
-            float theta     = i * 3.1415f / 180;
-            circle_x[count] = 3 * cos(t) + 3 * cos(theta);
-            circle_y[count] = 3 * sin(t) + 3 * sin(theta);
-            count++;
-        }
-        line_x[0] = 3 * cos(t);
-        line_y[0] = 3 * sin(t);
-        temp      = Hypotrochoid(t);
-        line_x[1] = temp.x;
-        line_y[1] = temp.y;
+        now = MorphTimeSinceCreation(&device);
         MorphResetPlotting(&device);
-        MorphParametric2DPlot(&device, RoseCurvesCircleVersion, 0, 3.1942599 * 2, (MVec3){0.0f, 0.0f, 1.0f},
-                              "RoseCircle", 0.05f);
-        MorphParametric2DPlot(&device, RoseCurves, 0, t, (MVec3){1.0f, 0.0f, 1.0f}, "RoseCurves", 0.005f);
-        MorphParametric2DPlot(&device, Hypotrochoid, 0, t, (MVec3){0.6, 0.0, 0.3}, "Hypotrochoid", 0.05f);
-        MorphPlotList(&device, circle_x, circle_y, count, (MVec3){1.0f, 1.0f, 0.0f}, "HypoCircle");
-        MorphPlotList(&device, line_x, line_y, 2, (MVec3){0.0f, 1.0f, 0.0f}, "HypoTrace");
-
-        then = MorphTimeSinceCreation(&device);
+        MorphParametric2DPlot(&device, intcurve, 0, total, (MVec3){0.0f, 0.4921f, 0.0f}, "Hypotrochoid", 0.01f);
+        total += step * (now - then);
+        then = now;
+        if (total > 30.0f)
+            step = -1; 
         MorphPhantomShow(&device);
     }
     MorphDestroyDevice(&device);
-    return 0;
 }

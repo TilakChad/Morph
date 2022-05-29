@@ -6977,6 +6977,7 @@ MorphPlotDevice MorphCreateDevice()
 
     Mat4 *ortho_matrix = malloc(sizeof(Mat4));
     *ortho_matrix      = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
+    // fprintf(stderr,"Width and height are : %d %d.",screen_width,screen_height);
 
     Graph *graph       = malloc(sizeof(*graph));
     InitGraph(graph);
@@ -7166,4 +7167,9 @@ void MorphPlotList(MorphPlotDevice *device, float *x, float *y, int length, MVec
 void MorphResetPlotting(MorphPlotDevice *device)
 {
     ResetRenderScene(device->render_scene);
+}
+
+void ImplicitFunctionPlot2D(MorphPlotDevice *device, ImplicitFn2D fn)
+{
+
 }

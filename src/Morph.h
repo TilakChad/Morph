@@ -27,6 +27,8 @@ typedef double (*ParametricFn1D)(double);
 // Parameterized by a single parameter
 typedef MVec2 (*ParametricFn2D)(double);
 
+typedef double (*ImplicitFn2D)(double x, double y);
+
 typedef struct
 {
     unsigned int program;
@@ -61,3 +63,4 @@ void   MorphParametric2DPlot(MorphPlotDevice *device, ParametricFn2D fn, float t
 double MorphTimeSinceCreation(MorphPlotDevice *device);
 void   MorphResetPlotting(MorphPlotDevice *device);
 bool   MorphShouldWindowClose(MorphPlotDevice *device);
+void   ImplicitFunctionPlot2D(MorphPlotDevice *device, ImplicitFn2D fn);
