@@ -6156,7 +6156,7 @@ GLFWwindow *LoadGLFW(int width, int height, const char *title)
     glfwWindowHint(GLFW_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // glfwWindowHint(GLFW_SAMPLES, 4);
+    glfwWindowHint(GLFW_SAMPLES, 4);
 
     if (!glfwInit())
     {
@@ -6972,6 +6972,9 @@ MorphPlotDevice MorphCreateDevice()
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+
+    // Enable the multi sampling 
+    glEnable(GL_MULTISAMPLE); 
 
     RenderScene *scene = malloc(sizeof(*scene));
     InitRenderScene(scene);
