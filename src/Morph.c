@@ -11,6 +11,7 @@
 #include <Windows.h>
 #elif defined(__linux__)
 #include <unistd.h>
+#include <time.h>
 #endif
 
 // copy paste stb_truetype
@@ -6977,7 +6978,6 @@ MorphPlotDevice MorphCreateDevice()
 
     Mat4 *ortho_matrix = malloc(sizeof(Mat4));
     *ortho_matrix      = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
-    // fprintf(stderr,"Width and height are : %d %d.",screen_width,screen_height);
 
     Graph *graph       = malloc(sizeof(*graph));
     InitGraph(graph);
@@ -7007,7 +7007,15 @@ MorphPlotDevice MorphCreateDevice()
     QueryPerformanceCounter(&counter);
     device.timer.count     = counter.QuadPart;
     device.timer.frequency = frequency.QuadPart;
+#elif defined(__linux__)
+    // using monotonic clock instead of realtime
+    struct timespec ts;
+    clock_getres(CLOCK_MONOTONIC,&ts);
+    device.timer.frequency = (uint64_t)(1000000000ULL/ts.tv_nsec);
+    clock_gettime(CLOCK_MONOTONIC,&ts);
+    device.timer.count = (uint64_t)(ts.tv_sec * device.timer.frequency + ts.tv_nsec * device.timer.frequency/1000000000ULL);
 #endif
+
 
     device.should_close = false;
     return device;
@@ -7061,7 +7069,13 @@ double MorphTimeSinceCreation(MorphPlotDevice *device)
     LARGE_INTEGER counter;
     QueryPerformanceCounter(&counter);
     elapsed_time = (((uint64_t)counter.QuadPart - device->timer.count) * 1.0) / device->timer.frequency;
+#elif defined(__linux__)
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC,&ts);
+    uint64_t count = ts.tv_sec * device->timer.frequency + ts.tv_nsec * device->timer.frequency/1000000000ULL;
+    elapsed_time = (((uint64_t)count - device->timer.count) * 1.0) / device->timer.frequency;
 #endif
+
     return elapsed_time;
 }
 
