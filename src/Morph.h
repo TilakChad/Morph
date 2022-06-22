@@ -4,11 +4,11 @@
 #include <GLFW/glfw3.h>
 #include <stdbool.h>
 
-typedef struct RenderScene RenderScene;
-typedef struct Graph       Graph;
-typedef struct Font        Font;
-typedef struct Mat4        Mat4;
-typedef struct State       State;
+typedef struct Scene Scene;
+typedef struct Graph Graph;
+typedef struct Font  Font;
+typedef struct Mat4  Mat4;
+typedef struct State State;
 
 typedef struct
 {
@@ -35,10 +35,12 @@ typedef struct
     unsigned int vao;
     unsigned int vbo;
     GLFWwindow  *window;
-    RenderScene *render_scene;
+    Scene       *scene;
     Graph       *graph;
     Font        *font;
     Mat4        *transform;
+    Mat4        *world_transform;
+    Mat4        *scale_matrix; 
     State       *panner;
     bool         should_close;
     struct Timer

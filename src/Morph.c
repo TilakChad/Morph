@@ -10,8 +10,8 @@
 #ifdef _WIN32
 #include <Windows.h>
 #elif defined(__linux__)
-#include <unistd.h>
 #include <time.h>
+#include <unistd.h>
 #endif
 
 // copy paste stb_truetype
@@ -5789,14 +5789,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <stdlib.h>
 #include <string.h>
 
-// TODO :: Place co-ordinate values on the axes -> Loading fonts -> Font loaded -> Almost done
-// TODO :: Scaling around point -> Lesszz do it -> Done without matrix
-// TODO :: Labels shown at bottom or left if origin isn't within the frame
 // TODO :: Minimize floating point errors
 // TODO :: Allow customization
 // TODO :: Allow multiple graphs be drawn on the same window -> Done simply (No plot device yet)
-// TODO :: Load font library and label the axes -> Done
-// Make UI appealing -> Partially done
+// TODO :: Load font library and label the axes -> Done// Make UI appealing -> Partially done
 
 // TODO Later : Add terminal and a parser
 
@@ -5887,6 +5883,72 @@ static Mat4 TransposeMatrix(Mat4 *mat)
     return matrix;
 }
 
+static Mat4 Inverse(Mat4 *mat)
+{
+    Mat4   matrix = {{0}};
+    float *inv    = &matrix.elem[0][0];
+    float *m      = &mat->elem[0][0];
+
+    double det;
+    int    i;
+
+    inv[0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15] + m[9] * m[7] * m[14] +
+             m[13] * m[6] * m[11] - m[13] * m[7] * m[10];
+
+    inv[4] = -m[4] * m[10] * m[15] + m[4] * m[11] * m[14] + m[8] * m[6] * m[15] - m[8] * m[7] * m[14] -
+             m[12] * m[6] * m[11] + m[12] * m[7] * m[10];
+
+    inv[8] = m[4] * m[9] * m[15] - m[4] * m[11] * m[13] - m[8] * m[5] * m[15] + m[8] * m[7] * m[13] +
+             m[12] * m[5] * m[11] - m[12] * m[7] * m[9];
+
+    inv[12] = -m[4] * m[9] * m[14] + m[4] * m[10] * m[13] + m[8] * m[5] * m[14] - m[8] * m[6] * m[13] -
+              m[12] * m[5] * m[10] + m[12] * m[6] * m[9];
+
+    inv[1] = -m[1] * m[10] * m[15] + m[1] * m[11] * m[14] + m[9] * m[2] * m[15] - m[9] * m[3] * m[14] -
+             m[13] * m[2] * m[11] + m[13] * m[3] * m[10];
+
+    inv[5] = m[0] * m[10] * m[15] - m[0] * m[11] * m[14] - m[8] * m[2] * m[15] + m[8] * m[3] * m[14] +
+             m[12] * m[2] * m[11] - m[12] * m[3] * m[10];
+
+    inv[9] = -m[0] * m[9] * m[15] + m[0] * m[11] * m[13] + m[8] * m[1] * m[15] - m[8] * m[3] * m[13] -
+             m[12] * m[1] * m[11] + m[12] * m[3] * m[9];
+
+    inv[13] = m[0] * m[9] * m[14] - m[0] * m[10] * m[13] - m[8] * m[1] * m[14] + m[8] * m[2] * m[13] +
+              m[12] * m[1] * m[10] - m[12] * m[2] * m[9];
+
+    inv[2] = m[1] * m[6] * m[15] - m[1] * m[7] * m[14] - m[5] * m[2] * m[15] + m[5] * m[3] * m[14] +
+             m[13] * m[2] * m[7] - m[13] * m[3] * m[6];
+
+    inv[6] = -m[0] * m[6] * m[15] + m[0] * m[7] * m[14] + m[4] * m[2] * m[15] - m[4] * m[3] * m[14] -
+             m[12] * m[2] * m[7] + m[12] * m[3] * m[6];
+
+    inv[10] = m[0] * m[5] * m[15] - m[0] * m[7] * m[13] - m[4] * m[1] * m[15] + m[4] * m[3] * m[13] +
+              m[12] * m[1] * m[7] - m[12] * m[3] * m[5];
+
+    inv[14] = -m[0] * m[5] * m[14] + m[0] * m[6] * m[13] + m[4] * m[1] * m[14] - m[4] * m[2] * m[13] -
+              m[12] * m[1] * m[6] + m[12] * m[2] * m[5];
+
+    inv[3] = -m[1] * m[6] * m[11] + m[1] * m[7] * m[10] + m[5] * m[2] * m[11] - m[5] * m[3] * m[10] -
+             m[9] * m[2] * m[7] + m[9] * m[3] * m[6];
+
+    inv[7] = m[0] * m[6] * m[11] - m[0] * m[7] * m[10] - m[4] * m[2] * m[11] + m[4] * m[3] * m[10] +
+             m[8] * m[2] * m[7] - m[8] * m[3] * m[6];
+
+    inv[11] = -m[0] * m[5] * m[11] + m[0] * m[7] * m[9] + m[4] * m[1] * m[11] - m[4] * m[3] * m[9] -
+              m[8] * m[1] * m[7] + m[8] * m[3] * m[5];
+
+    inv[15] = m[0] * m[5] * m[10] - m[0] * m[6] * m[9] - m[4] * m[1] * m[10] + m[4] * m[2] * m[9] + m[8] * m[1] * m[6] -
+              m[8] * m[2] * m[5];
+
+    det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+
+    det = 1.0 / det;
+
+    for (i = 0; i < 16; i++)
+        inv[i] = inv[i] * det;
+    return matrix;
+}
+
 static Mat4 MatrixMultiply(Mat4 *mat1, Mat4 *mat2)
 {
     Mat4  matrix = {{0}};
@@ -5901,6 +5963,19 @@ static Mat4 MatrixMultiply(Mat4 *mat1, Mat4 *mat2)
         }
     }
     return matrix;
+}
+
+static void MatrixVectorMultiply(Mat4 *mat, float vec[4])
+{
+    float result[4] = {0};
+    for (uint8_t i = 0; i < 4; ++i)
+    {
+        for (uint8_t j = 0; j < 4; ++j)
+        {
+            result[i] += mat->elem[i][j] * vec[j];
+        }
+    }
+    memcpy(vec, result, sizeof(float) * 4);
 }
 
 static Mat4 IdentityMatrix()
@@ -5921,6 +5996,7 @@ struct Graph
     unsigned int vao;
     unsigned int vbo;
     unsigned int program;
+
     float        width;
     float        value;
 
@@ -5934,6 +6010,7 @@ typedef struct
 {
     Mat4  *OrthoMatrix;
     Graph *graph;
+    Mat4  *scale_transform;
 } UserData;
 
 typedef struct
@@ -6017,10 +6094,11 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
     double xPos, yPos;
     glfwGetCursorPos(window, &xPos, &yPos);
     // shift the origin somewhere far from here
+    const int scale_factor = 100;
 
-    double scaledFactor = 0.0f;
+    double    scaledFactor = 0.0f;
 
-    float  prev_scale_x = graph->slide_scale.x;
+    float     prev_scale_x = graph->slide_scale.x;
     graph->slide_scale.y += scale * yoffset;
     graph->slide_scale.x += scale * yoffset;
     scaledFactor = graph->slide_scale.x / prev_scale_x;
@@ -6028,6 +6106,7 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
     static int absScale = 0;
 
     bool       changeX = false, changeY = false;
+    float      s = 1.0f;
     if (yoffset < 0)
     {
         float should_scale_x = origin / graph->slide_scale.x * graph->scale.x;
@@ -6055,12 +6134,12 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
         }
         graph->slide_scale = (MVec2){origin, origin};
     }
-    // Now shift the origin to somewhere else .. don't know where yet
-    // Its awkard to do these kinda stuffs without matrix .. haha
-    int delX = -xPos + graph->center.x;
-    int delY = -yPos + graph->center.y;
-    graph->center.x += delX * scaledFactor - delX;
-    graph->center.y += delY * scaledFactor - delY;
+
+    // adjust the scaling of the graph
+
+    Mat4 *scale_transform = data->scale_transform;
+    s                     = graph->slide_scale.x / graph->scale.x;
+    *scale_transform      = ScalarMatrix(s, s, 1.0f);
 }
 
 unsigned int LoadProgram(Shader vertex, Shader fragment)
@@ -6186,38 +6265,68 @@ GLFWwindow *LoadGLFW(int width, int height, const char *title)
     return window;
 }
 
-struct RenderScene
+typedef struct VertexBuffer
 {
-    uint32_t iCount;
-    uint32_t vCount; // To be rendered vertices
+    bool     dirty;
+    uint32_t count;
+    uint32_t max;
+    uint32_t vbo;
+    uint8_t *data;
+} VertexBuffer;
 
-    uint32_t pCount; // Original Vertices
+typedef enum Primitives
+{
+    TRIANGLES      = GL_TRIANGLES,
+    LINES          = GL_LINES,
+    LINE_STRIP     = GL_LINE_STRIP,
+    LINE_LOOP      = GL_LINE_LOOP,
+    TRIANGLE_STRIP = GL_TRIANGLE_STRIP
+} Primitives;
 
-    uint32_t iMax;
-    uint32_t vMax;
+typedef struct GPUBatch
+{
+    VertexBuffer vertex_buffer;
+    uint32_t     vao;
+    Primitives   primitive;
+} GPUBatch;
 
-    // index that marks the discontinuity of the vertices
-    // dMax -> Maximum number of discontinuity allowed for a function
-    uint32_t  dCount;
-    uint32_t  dMax;
+typedef struct FunctionPlotData
+{
+    GPUBatch *batch;
+    uint32_t  max;
+    uint32_t  count;
+    MVec3     color;
+    MVec2    *samples;
+    char      plot_name[25];
+} FunctionPlotData;
 
-    uint32_t *Indices;
-    uint32_t *Discontinuity;
-    MVec2    *Vertices;
-    MVec2    *Points;
+typedef struct FontData
+{
+    uint32_t max;
+    MVec3    color;
+    uint32_t count;
+    MVec2   *data;
+} FontData;
 
-    // Need support for font rendering here
-    uint32_t fCount; // This might seem inconsistent but whatever
-    // Each fCount will have 6 vertices with each vertex having 4 floats or 2 MVec2's
-    MVec2 *fVertices;
+typedef struct PlotArray
+{
+    uint32_t          max;
+    uint32_t          count;
+    FunctionPlotData *functions;
+} PlotArray;
 
-    // Now multiple plotting.. we need to setup break point somewhere
-    uint32_t     cMaxGraph;
-    uint32_t     graphcount;
-    uint32_t    *graphbreak; // returns indices to break at
-    MVec3       *graphcolor;
-    const char **graphname;
-};
+typedef struct FontArray
+{
+    uint32_t  max;
+    uint32_t  count;
+    FontData *fonts;
+} FontArray;
+
+typedef struct Scene
+{
+    PlotArray plots;
+    FontArray fonts;
+} Scene;
 
 struct State
 {
@@ -6225,6 +6334,49 @@ struct State
     double xpos;
     double ypos;
 };
+
+GPUBatch *CreateNewBatch(Primitives primitive)
+{
+    GPUBatch *batch          = malloc(sizeof(*batch));
+    batch->vertex_buffer.max = 1000;
+    batch->primitive         = primitive;
+
+    glGenVertexArrays(1, &batch->vao);
+    glGenBuffers(1, &batch->vertex_buffer.vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, batch->vertex_buffer.vbo);
+    glBufferData(GL_ARRAY_BUFFER, batch->vertex_buffer.max * batch->vertex_buffer.max, NULL, GL_STATIC_DRAW);
+
+    batch->vertex_buffer.max   = 1000;
+    batch->vertex_buffer.count = 0;
+    batch->vertex_buffer.dirty = true;
+    batch->vertex_buffer.data  = malloc(sizeof(uint8_t) * batch->vertex_buffer.max);
+
+    return batch;
+}
+
+void DrawBatch(GPUBatch *batch)
+{
+    glBindVertexArray(batch->vao);
+    glDrawArrays(batch->primitive, 0, batch->vertex_buffer.count / (2 * 4));
+}
+
+void PrepareBatch(GPUBatch *batch)
+{
+    if (batch->vertex_buffer.dirty)
+    {
+        glBindVertexArray(batch->vao);
+        glBindBuffer(GL_ARRAY_BUFFER, batch->vertex_buffer.vbo);
+        void *access = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+        // This is redundant
+        memcpy(access, batch->vertex_buffer.data, sizeof(uint8_t) * batch->vertex_buffer.count);
+        glUnmapBuffer(GL_ARRAY_BUFFER);
+
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), NULL);
+        glEnableVertexAttribArray(0);
+
+        batch->vertex_buffer.dirty = false;
+    }
+}
 
 typedef MVec2 (*parametricfn)(double);
 
@@ -6265,171 +6417,165 @@ void InitGraph(Graph *graph)
         FRAGMENT_SHADER);
 
     graph->program = LoadProgram(vertex, fragment);
-
-    graph->center  = (MVec2){400.0f, 400.0f};
+    graph->center  = (MVec2){0.0f, 0.0f};
 
     // Make graph->scale use value instead of pixel scale
     graph->scale       = (MVec2){1.0f, 1.0f};
-
     graph->slide_scale = (MVec2){200.0f, 200.0f};
 }
 
-void RenderGraph(Graph *graph)
+void RenderGraph(Graph *graph, Mat4 *transform)
 {
     glUseProgram(graph->program);
     glBindVertexArray(graph->vao);
     glUniform1i(glGetUniformLocation(graph->program, "grid_width"), 0);
-    glUniform2f(glGetUniformLocation(graph->program, "center"), graph->center.x, graph->center.y);
+    float center[4] = {graph->center.x, graph->center.y, 0.0f, 1.0f};
+    MatrixVectorMultiply(transform, center);
+    glUniform2f(glGetUniformLocation(graph->program, "center"), center[0], center[1]);
     glUniform2f(glGetUniformLocation(graph->program, "scale"), graph->slide_scale.x, graph->slide_scale.y);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glUseProgram(0);
     glBindVertexArray(0);
 }
 
-void DestroyRenderScene(RenderScene *render_scene)
+void Destroy2DScene(Scene *scene)
 {
-    free(render_scene->Indices);
+    /*free(render_scene->Indices);
     free(render_scene->Vertices);
     free(render_scene->Discontinuity);
     free(render_scene->Points);
-    free(render_scene->fVertices);
+    free(render_scene->fVertices);*/
 }
 
-void InitRenderScene(RenderScene *scene_group)
+void Init2DScene(Scene *scene)
 {
-    memset(scene_group, 0, sizeof(*scene_group));
-    scene_group->iMax          = 5000;
-    scene_group->vMax          = 20000;
-    scene_group->dMax          = 1000;
-    scene_group->cMaxGraph     = 100;
+    memset(scene, 0, sizeof(*scene));
+    // Init enough memory for 10 graphs
+    scene->plots.max       = 10;
+    scene->plots.functions = malloc(sizeof(*scene->plots.functions) * scene->plots.max);
+    for (uint32_t plot = 0; plot < scene->plots.max; ++plot)
+    {
+        /*scene->plots.functions[plot].batch = NULL;
+        scene->plots.functions[plot].count = 0; */
+        memset(scene->plots.functions + plot, 0, sizeof(*scene->plots.functions));
+    }
 
-    scene_group->Indices       = malloc(sizeof(*scene_group->Indices) * scene_group->iMax);
-    scene_group->Vertices      = malloc(sizeof(*scene_group->Vertices) * scene_group->vMax);
-    scene_group->Discontinuity = malloc(sizeof(*scene_group->Discontinuity) * scene_group->dMax);
-    scene_group->Points        = malloc(sizeof(*scene_group->Vertices) * scene_group->vMax);
-    scene_group->graphbreak    = malloc(sizeof(*scene_group->graphbreak) * scene_group->cMaxGraph);
-    scene_group->graphname     = malloc(sizeof(*scene_group->graphname) * scene_group->cMaxGraph);
-    scene_group->graphcolor    = malloc(sizeof(*scene_group->graphcolor) * scene_group->cMaxGraph);
-
-    const int maxFontVertices  = 10000; // will render 10000/6 fonts only
-    scene_group->fVertices     = malloc(sizeof(*scene_group->fVertices) * maxFontVertices);
+    scene->fonts.max   = 10;
+    scene->fonts.fonts = malloc(sizeof(*scene->fonts.fonts) * scene->fonts.max);
 }
 
-void AddSingleVertex(RenderScene *scene_group, MVec2 vertex)
-{
-    // TODO :: Remove this bound check .. Expensiiiivvve
-    assert(scene_group->vCount + 1 <= scene_group->vMax);
-    scene_group->Vertices[scene_group->vCount++] = vertex;
-}
-
-void AddSinglePoint(RenderScene *scene_group, MVec2 vertex)
-{
-    assert(scene_group->pCount + 1 <= scene_group->vMax);
-    scene_group->Points[scene_group->pCount++] = vertex;
-}
-
-void RenderRenderScene(RenderScene *scene_group, unsigned int program, bool showPoints)
+void RenderScene(Scene *scene, unsigned int program, bool showPoints, Mat4 *transform)
 {
     glLineWidth(6);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(*scene_group->Vertices) * scene_group->vCount, scene_group->Vertices);
+    glUseProgram(program);
+    glUniformMatrix4fv(glGetUniformLocation(program, "scene"), 1, GL_TRUE, &transform->elem[0][0]);
 
-    // Plot everything in the way
-    // glDrawArrays(GL_LINE_STRIP, 0, scene_group->vCount);
-
-    // We going for multiple rendering calls .. more work on GPU side
-    int vertices = 0;
-    for (int graph_c = 0; graph_c < scene_group->graphcount; ++graph_c)
+    for (uint32_t graph = 0; graph < scene->plots.count; ++graph)
     {
-        MVec3 inColor = scene_group->graphcolor[graph_c];
-        glUniform3f(glGetUniformLocation(program, "inColor"), inColor.x, inColor.y, inColor.z);
-        int discontinuous = 0;
-        for (int i = vertices; i < (int32_t)scene_group->dCount - 1; ++i)
+        FunctionPlotData *function = &scene->plots.functions[graph];
+        glUniform3f(glGetUniformLocation(program, "inColor"), 0.5f, 0.3f, 0.1f);
+        // Transfer data to the batch
+        if (function->batch == NULL)
         {
-            glDrawArrays(GL_LINE_STRIP, discontinuous, scene_group->Discontinuity[i] - discontinuous);
-            discontinuous = scene_group->Discontinuity[i] + 1;
-            if (graph_c < scene_group->graphcount - 1)
-            {
-                if (discontinuous >= scene_group->graphbreak[scene_group->graphcount + 1])
-                    break;
-            }
+            function->batch = CreateNewBatch(LINE_STRIP);
+            assert(function->count * 2 * 4 < function->batch->vertex_buffer.max);
+            memcpy(function->batch->vertex_buffer.data, function->samples, sizeof(uint8_t) * function->count * 2 * 4);
+            function->batch->vertex_buffer.count = function->count * 2 * 4;
         }
-
-        //// Pick up from the last discontinuity and continue the graph from there
-        if (scene_group->dCount)
-            glDrawArrays(GL_LINE_STRIP, scene_group->Discontinuity[scene_group->dCount - 1] + 1,
-                         scene_group->vCount - (scene_group->Discontinuity[scene_group->dCount - 1] + 1));
-        else
-            glDrawArrays(GL_LINE_STRIP, vertices, scene_group->graphbreak[graph_c] - vertices);
-
-        if (showPoints)
-        {
-            glUniform3f(glGetUniformLocation(program, "inColor"), 1.0f, 0.0f, 0.0f);
-            glPointSize(10);
-            glDrawArrays(GL_POINTS, vertices, scene_group->vCount);
-        }
-        vertices = scene_group->graphbreak[graph_c];
+        PrepareBatch(function->batch);
+        DrawBatch(function->batch);
     }
 }
 
-// I will try drawing a grid where graph plotting will take place
-void ResetRenderScene(RenderScene *scene_group)
+void PrepareScene(Scene *scene, Graph *graph)
 {
-    scene_group->iCount     = 0;
-    scene_group->vCount     = 0;
-    scene_group->dCount     = 0;
-    scene_group->fCount     = 0;
-    scene_group->pCount     = 0;
-    scene_group->graphcount = 0;
+    // for (uint32_t graph_ = 0; graph_ < scene->plots.count; ++graph_)
+    //{
+    //     FunctionPlotData *function = &scene->plots.functions[graph_];
+    //     for (uint32_t pt = 0; pt < function->count; ++pt)
+    //     {
+    //         function->samples[pt].x = function->samples[pt].x * graph->slide_scale.x / graph->scale.x;
+    //         function->samples[pt].y = function->samples[pt].y * graph->slide_scale.y / graph->scale.y;
+    //     }
+    // }
 }
 
-static void PlotGraph(RenderScene *scene_group, ParametricFn1D func, Graph *graph, MVec3 color, const char *legend)
+void ResetScene(Scene *scene_group)
 {
-    MVec2 vec1, MVec2;
+    // No op
+}
 
-    float step = 0.02f;
-    float init = -10.0f;
-    float term = 10.0f;
+// static void PlotGraph(Scene *scene, ParametricFn1D func, Graph *graph, MVec3 color, const char *legend)
+//{
+//     // No check done here currently
+//     const uint32_t max_verts                           = 1000;
+//     scene->plots.functions[scene->plots.count].max     = max_verts; // 1000 vertices for each graph at most
+//     scene->plots.functions[scene->plots.count].samples = malloc(sizeof(MVec2) * max_verts);
+//
+//     MVec2 vec1, vec2;
+//
+//     float step                 = 0.5f;
+//     float init                 = -10.0f;
+//     float term                 = 10.0f;
+//
+//     vec1.x                     = graph->center.x + init * graph->slide_scale.x / (graph->scale.x);
+//     vec1.y                     = graph->center.y + func(init) * graph->slide_scale.y / (graph->scale.y);
+//
+//     FunctionPlotData *function = &scene->plots.functions[scene->plots.count];
+//
+//     for (float x = init; x <= term; x += step)
+//     {
+//         vec2.x = graph->center.x + (x + step) * graph->slide_scale.x / (graph->scale.x);
+//         vec2.y = graph->center.y + func(x + step) * graph->slide_scale.y / (graph->scale.y);
+//
+//         // Excluded for now
+//         // float slope = atan(fabs((MVec2.y - vec1.y) / (MVec2.x - vec1.x)));
+//         assert(function->count < function->max);
+//         function->samples[function->count++] = vec1;
+//         vec1                                 = vec2;
+//     }
+//     scene->plots.count++;
+// }
 
-    vec1.x     = graph->center.x + init * graph->slide_scale.x / (graph->scale.x);
-    vec1.y     = graph->center.y + func(init) * graph->slide_scale.y / (graph->scale.y);
+static void Plot1D(Scene *scene, ParametricFn1D func, Graph *graph, MVec3 color, const char *legend)
+{
+    // No check done here currently
+    const uint32_t max_verts                           = 1000;
+    scene->plots.functions[scene->plots.count].max     = max_verts; // 1000 vertices for each graph at most
+    scene->plots.functions[scene->plots.count].samples = malloc(sizeof(MVec2) * max_verts);
+
+    float             init                             = -10.0f;
+    float             term                             = 10.0f;
+    float             step                             = 0.2f;
+
+    FunctionPlotData *function                         = &scene->plots.functions[scene->plots.count];
+
+    MVec2             vec;
 
     for (float x = init; x <= term; x += step)
     {
-        // Check for discontinuity of the function
-        MVec2.x = graph->center.x + (x + step) * graph->slide_scale.x / (graph->scale.x);
-        MVec2.y = graph->center.y + func(x + step) * graph->slide_scale.y / (graph->scale.y);
-
-        AddSingleVertex(scene_group, vec1);
-        float slope = atan(fabs((MVec2.y - vec1.y) / (MVec2.x - vec1.x)));
-        if (slope > 1.57f)
-        {
-            // mark current point as discontinuity
-            assert(scene_group->dCount < scene_group->dMax);
-            scene_group->Discontinuity[scene_group->dCount++] = scene_group->vCount;
-            // fprintf(stderr, "Point of discontinuity for inverse function is at %f.\n", slope);
-        }
-        vec1 = MVec2;
+        vec.x = x;
+        vec.y = func(vec.x);
+        assert(function->count < function->max);
+        function->samples[function->count++] = vec;
     }
-    // Add number of vertices in the current graph
-    assert(scene_group->graphcount < scene_group->cMaxGraph);
-    scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
-    scene_group->graphcolor[scene_group->graphcount - 1] = color;
-    scene_group->graphname[scene_group->graphcount - 1]  = legend; // only static strings are expected as of yet
+
+    scene->plots.count++;
 }
 
-void PlotParametric(RenderScene *scene_group, parametricfn func, Graph *graph)
+void PlotParametric(Scene *scene, parametricfn func, Graph *graph)
 {
-    MVec2 vec;
+    /*MVec2 vec;
     for (float i = -3.141592f * 2; i <= 3.141592f * 2; i += 0.04f)
     {
         vec   = func(i);
         vec.x = graph->center.x + vec.x * graph->scale.x;
         vec.y = graph->center.y + vec.y * graph->scale.y;
         AddSingleVertex(scene_group, vec);
-    }
+    }*/
 }
 
-void HandleEvents(GLFWwindow *window, State *state, Graph *graph);
+void HandleEvents(GLFWwindow *window, State *state, Graph *graph, Mat4 *world_transform);
 
 typedef struct Glyph
 {
@@ -6464,20 +6610,6 @@ void LoadFont(Font *font, const char *font_dir)
         return;
     }
 
-    if (1)
-    {
-        // Use system wide font
-        //#ifdef _WIN32
-        // HDC hdc = CreateCompatibleDC(NULL);
-        // if (hdc != NULL)
-        //{
-        //    int32_t size = GetFontData(hdc, 0, 0, NULL, 0);
-        //    fprintf(stderr, "Buffer size required is : %d.",size);
-        //}
-        //#elif  __linux__
-
-        //#endif
-    }
     stbtt_InitFont(&sfont, fontbuffer.data, 0);
 
     // Load the character's data from stb_truetype
@@ -6605,264 +6737,170 @@ void LoadSystemFont(Font *font, const char *font_name)
 }
 
 // position in pixel where (0,0) is the lower left corner of the screen
-void FillText(RenderScene *scene_group, Font *font, MVec2 position, String str, int scale)
+// void FillText(Scene *scene, Font *font, MVec2 position, String str, int scale)
+//{
+//    // its quite straightforward
+//    int32_t x = position.x;
+//    int32_t y = position.y;
+//
+//    float   tex0, tex1;
+//
+//    for (uint32_t i = 0; i < str.length; ++i)
+//    {
+//        int   count = scene_group->fCount;
+//        Glyph glyph = font->character[(size_t)str.data[i]];
+//        int   w     = glyph.Advance;
+//        int   h     = font->height;
+//
+//        tex0        = glyph.offset.x / font->width;
+//        tex1        = (glyph.offset.x + w) / font->width;
+//        // lower left corner
+//        scene_group->fVertices[count * 12 + 0] = (MVec2){x, y};
+//        scene_group->fVertices[count * 12 + 1] = (MVec2){tex0, 1.0f};
+//        // upper left corner
+//        scene_group->fVertices[count * 12 + 2] = (MVec2){x, y + h};
+//        scene_group->fVertices[count * 12 + 3] = (MVec2){tex0, 0.0f};
+//        // upper right corner
+//        scene_group->fVertices[count * 12 + 4] = (MVec2){x + w, y + h};
+//        scene_group->fVertices[count * 12 + 5] = (MVec2){tex1, 0.0f};
+//        // lower left corner
+//        scene_group->fVertices[count * 12 + 6] = (MVec2){x + w, y};
+//        scene_group->fVertices[count * 12 + 7] = (MVec2){tex1, 1.0f};
+//        // duplicate lower left and upper right
+//        // upper right corner
+//        scene_group->fVertices[count * 12 + 8] = (MVec2){x + w, y + h};
+//        scene_group->fVertices[count * 12 + 9] = (MVec2){tex1, 0.0f};
+//        // lower left corner
+//        scene_group->fVertices[count * 12 + 10] = (MVec2){x, y};
+//        scene_group->fVertices[count * 12 + 11] = (MVec2){tex0, 1.0f};
+//
+//        x                                       = x + glyph.Advance;
+//        scene_group->fCount += 1;
+//    }
+//}
+
+// void RenderFont(Scene *scene, Font *font, Mat4 *scene_transform)
+//{
+//     // Allocate font storage
+//     glUseProgram(font->program);
+//     glBindVertexArray(font->vao);
+//
+//     glUniformMatrix4fv(glGetUniformLocation(font->program, "scene"), 1, GL_TRUE, &scene_transform->elem[0][0]);
+//     glBindTexture(GL_TEXTURE_2D, font->font_texture);
+//
+//     glBindBuffer(GL_ARRAY_BUFFER, font->vbo);
+//     glBufferSubData(GL_ARRAY_BUFFER, 0, scene_group->fCount * 12 * sizeof(MVec2), scene_group->fVertices);
+//     glDrawArrays(GL_TRIANGLES, 0, scene_group->fCount * 6);
+//     glBindVertexArray(0);
+//     glUseProgram(0);
+// }
+
+// void RenderLabels(Scene *scene, Font *font, Graph *graph, Mat4 *orthoMatrix)
+//{
+//     MVec2 origin = graph->center;
+//     MVec2 position;
+//
+//     // Calculate the min and max vertical bar visible on the current frame first
+//     int xLow  = -origin.x / graph->slide_scale.x - 1;
+//     int xHigh = (screen_width - origin.x) / graph->slide_scale.x + 1;
+//
+//     for (int i = xLow * 2; i <= xHigh * 2; ++i)
+//     {
+//         position.x = origin.x + i * graph->slide_scale.x / 2 - font->height / 2;
+//         position.y = origin.y - font->height;
+//         // Now calculate the value at the position
+//
+//         // Clamp the value so that they remain inside the screen
+//         if (position.y < 0)
+//             position.y = font->height / 2;
+//         else if (position.y > screen_height)
+//             position.y = screen_height - font->height;
+//
+//         float val   = i * graph->scale.x / 2;
+//         int   count = snprintf(NULL, 0, "%3g", val);
+//         snprintf(font->font_buffer, count + 1, "%3g", val);
+//         String str = {.data = font->font_buffer, .length = count};
+//         FillText(scene, font, position, str, 0);
+//     }
+//
+//     int yLow  = -origin.y / graph->slide_scale.y - 1;
+//     int yHigh = (screen_height - origin.y) / graph->slide_scale.y + 1;
+//
+//     for (int y = yLow * 2; y <= yHigh * 2; ++y)
+//     {
+//         if (y == 0)
+//             continue;
+//         position.x = origin.x - font->height * 1.5f;
+//         position.y = origin.y + y * graph->slide_scale.y / 2 - font->height / 2;
+//
+//         if (position.x < 0)
+//             position.x = font->height;
+//         else if (position.x > screen_width)
+//             position.x = screen_width - font->height;
+//
+//         float val   = y * graph->scale.y / 2;
+//         int   count = snprintf(NULL, 0, "%3g", val);
+//         snprintf(font->font_buffer, count + 1, "%3g", val);
+//         String str = {.data = font->font_buffer, .length = count};
+//         FillText(scene, font, position, str, 0);
+//     }
+// }
+
+// void DrawLegends(Scene *scene, Font *font, Graph *graph) // choose location automatically
+//{
+//     // First draw a appropriate bounding box -> Easily handled by line strips
+//     // Draw a small rectangle filled with that color -> Might need a new pixel shader -> Used simple line instead
+//     // Finally draw text with plot name -> Already available
+//     // Find the appropriate place to put the legend
+//     MVec2 pos = {0};
+//     pos.x     = screen_width - 200;
+//     pos.y     = screen_height - font->height;
+//
+//     for (int label = 0; label < scene->fonts.count; ++label)
+//     {
+//         // Add a line indicator with given color for legends
+//         AddSingleVertex(scene_group, pos);
+//         AddSingleVertex(scene_group, (MVec2){pos.x + 50, pos.y});
+//         scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
+//         scene_group->graphcolor[scene_group->graphcount - 1] = scene_group->graphcolor[label];
+//         FillText(scene_group, font, (MVec2){pos.x + 75, pos.y - font->height / 2},
+//                  (String){.data = scene_group->graphname[label], .length = strlen(scene_group->graphname[label])},
+//                  0);
+//
+//         pos.y -= font->height;
+//     }
+//
+//     // Add a graph break for a small box around legends
+//     AddSingleVertex(scene_group, (MVec2){pos.x - 10, screen_height});
+//     AddSingleVertex(scene_group, (MVec2){pos.x - 10, pos.y - 20});
+//     AddSingleVertex(scene_group, (MVec2){screen_width, pos.y - 20});
+//
+//     assert(scene_group->graphcount < scene_group->cMaxGraph);
+//     scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
+//     scene_group->graphcolor[scene_group->graphcount - 1] = (MVec3){0.5f, 0.5f, 0.5f};
+//     scene_group->graphname[scene_group->graphcount - 1]  = ""; // only static strings are expected as of yet
+// }
+
+// void ShowList(RenderScene *scene_group, Font *font, Graph *graph, float *x, float *y, int length,
+//               const char *GiveOnlyStaticStrings, MVec3 color)
+//{
+//     MVec2 vec;
+//     for (int points = 0; points < length; ++points)
+//     {
+//         vec.x = graph->center.x + x[points] * graph->slide_scale.x / (graph->scale.x);
+//         vec.y = graph->center.y + y[points] * graph->slide_scale.y / (graph->scale.y);
+//         AddSingleVertex(scene_group, vec);
+//     }
+//
+//     assert(scene_group->graphcount < scene_group->cMaxGraph);
+//     scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
+//     scene_group->graphcolor[scene_group->graphcount - 1] = color;
+//     scene_group->graphname[scene_group->graphcount - 1]  = GiveOnlyStaticStrings;
+// }
+
+void HandleEvents(GLFWwindow *window, State *state, Graph *graph, Mat4 *world_matrix)
 {
-    // its quite straightforward
-    int32_t x = position.x;
-    int32_t y = position.y;
-
-    float   tex0, tex1;
-
-    for (uint32_t i = 0; i < str.length; ++i)
-    {
-        int   count = scene_group->fCount;
-        Glyph glyph = font->character[(size_t)str.data[i]];
-        int   w     = glyph.Advance;
-        int   h     = font->height;
-
-        tex0        = glyph.offset.x / font->width;
-        tex1        = (glyph.offset.x + w) / font->width;
-        // lower left corner
-        scene_group->fVertices[count * 12 + 0] = (MVec2){x, y};
-        scene_group->fVertices[count * 12 + 1] = (MVec2){tex0, 1.0f};
-        // upper left corner
-        scene_group->fVertices[count * 12 + 2] = (MVec2){x, y + h};
-        scene_group->fVertices[count * 12 + 3] = (MVec2){tex0, 0.0f};
-        // upper right corner
-        scene_group->fVertices[count * 12 + 4] = (MVec2){x + w, y + h};
-        scene_group->fVertices[count * 12 + 5] = (MVec2){tex1, 0.0f};
-        // lower left corner
-        scene_group->fVertices[count * 12 + 6] = (MVec2){x + w, y};
-        scene_group->fVertices[count * 12 + 7] = (MVec2){tex1, 1.0f};
-        // duplicate lower left and upper right
-        // upper right corner
-        scene_group->fVertices[count * 12 + 8] = (MVec2){x + w, y + h};
-        scene_group->fVertices[count * 12 + 9] = (MVec2){tex1, 0.0f};
-        // lower left corner
-        scene_group->fVertices[count * 12 + 10] = (MVec2){x, y};
-        scene_group->fVertices[count * 12 + 11] = (MVec2){tex0, 1.0f};
-
-        x                                       = x + glyph.Advance;
-        scene_group->fCount += 1;
-    }
-}
-
-void RenderFont(RenderScene *scene_group, Font *font, Mat4 *scene_transform)
-{
-    glUseProgram(font->program);
-    glBindVertexArray(font->vao);
-
-    glUniformMatrix4fv(glGetUniformLocation(font->program, "scene"), 1, GL_TRUE, &scene_transform->elem[0][0]);
-    glBindTexture(GL_TEXTURE_2D, font->font_texture);
-
-    glBindBuffer(GL_ARRAY_BUFFER, font->vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, scene_group->fCount * 12 * sizeof(MVec2), scene_group->fVertices);
-    glDrawArrays(GL_TRIANGLES, 0, scene_group->fCount * 6);
-    glBindVertexArray(0);
-    glUseProgram(0);
-}
-
-void RenderLabels(RenderScene *scene_group, Font *font, Graph *graph, Mat4 *orthoMatrix)
-{
-    MVec2 origin = graph->center;
-    MVec2 position;
-
-    // Calculate the min and max vertical bar visible on the current frame first
-    int xLow  = -origin.x / graph->slide_scale.x - 1;
-    int xHigh = (screen_width - origin.x) / graph->slide_scale.x + 1;
-
-    for (int i = xLow * 2; i <= xHigh * 2; ++i)
-    {
-        position.x = origin.x + i * graph->slide_scale.x / 2 - font->height / 2;
-        position.y = origin.y - font->height;
-        // Now calculate the value at the position
-
-        // Clamp the value so that they remain inside the screen
-        if (position.y < 0)
-            position.y = font->height;
-        else if (position.y > screen_height)
-            position.y = screen_height - font->height;
-
-        float val   = i * graph->scale.x / 2;
-        int   count = snprintf(NULL, 0, "%3g", val);
-        snprintf(font->font_buffer, count + 1, "%3g", val);
-        String str = {.data = font->font_buffer, .length = count};
-        FillText(scene_group, font, position, str, 0);
-    }
-
-    int yLow  = -origin.y / graph->slide_scale.y - 1;
-    int yHigh = (screen_height - origin.y) / graph->slide_scale.y + 1;
-
-    for (int y = yLow * 2; y <= yHigh * 2; ++y)
-    {
-        if (y == 0)
-            continue;
-        position.x = origin.x - font->height * 1.5f;
-        position.y = origin.y + y * graph->slide_scale.y / 2 - font->height / 2;
-
-        if (position.x < 0)
-            position.x = font->height;
-        else if (position.x > screen_width)
-            position.x = screen_width - font->height;
-
-        float val   = y * graph->scale.y / 2;
-        int   count = snprintf(NULL, 0, "%3g", val);
-        snprintf(font->font_buffer, count + 1, "%3g", val);
-        String str = {.data = font->font_buffer, .length = count};
-        FillText(scene_group, font, position, str, 0);
-    }
-}
-
-void DrawLegends(RenderScene *scene_group, Font *font, Graph *graph) // choose location automatically
-{
-    // First draw a appropriate bounding box -> Easily handled by line strips
-    // Draw a small rectangle filled with that color -> Might need a new pixel shader -> Used simple line instead
-    // Finally draw text with plot name -> Already available
-    // Find the appropriate place to put the legend
-    MVec2 pos  = {0};
-    pos.x      = screen_width - 200;
-    pos.y      = screen_height - font->height;
-
-    int gcount = scene_group->graphcount;
-    for (int label = 0; label < gcount; ++label)
-    {
-        // Add a line indicator with given color for legends
-        AddSingleVertex(scene_group, pos);
-        AddSingleVertex(scene_group, (MVec2){pos.x + 50, pos.y});
-        scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
-        scene_group->graphcolor[scene_group->graphcount - 1] = scene_group->graphcolor[label];
-        FillText(scene_group, font, (MVec2){pos.x + 75, pos.y - font->height / 2},
-                 (String){.data = scene_group->graphname[label], .length = strlen(scene_group->graphname[label])}, 0);
-
-        pos.y -= font->height;
-    }
-
-    // Add a graph break for a small box around legends
-    AddSingleVertex(scene_group, (MVec2){pos.x - 10, screen_height});
-    AddSingleVertex(scene_group, (MVec2){pos.x - 10, pos.y - 20});
-    AddSingleVertex(scene_group, (MVec2){screen_width, pos.y - 20});
-
-    assert(scene_group->graphcount < scene_group->cMaxGraph);
-    scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
-    scene_group->graphcolor[scene_group->graphcount - 1] = (MVec3){0.5f, 0.5f, 0.5f};
-    scene_group->graphname[scene_group->graphcount - 1]  = ""; // only static strings are expected as of yet
-}
-
-void ShowList(RenderScene *scene_group, Font *font, Graph *graph, float *x, float *y, int length,
-              const char *GiveOnlyStaticStrings, MVec3 color)
-{
-    MVec2 vec;
-    for (int points = 0; points < length; ++points)
-    {
-        vec.x = graph->center.x + x[points] * graph->slide_scale.x / (graph->scale.x);
-        vec.y = graph->center.y + y[points] * graph->slide_scale.y / (graph->scale.y);
-        AddSingleVertex(scene_group, vec);
-    }
-
-    assert(scene_group->graphcount < scene_group->cMaxGraph);
-    scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
-    scene_group->graphcolor[scene_group->graphcount - 1] = color;
-    scene_group->graphname[scene_group->graphcount - 1]  = GiveOnlyStaticStrings;
-}
-
-int nolongermain(int argc, char **argv)
-{
-    GLFWwindow  *window   = LoadGLFW(screen_width, screen_height, "Graph FFI");
-    Shader       vertex   = LoadShader("./include/vertex.glsl", VERTEX_SHADER);
-    Shader       fragment = LoadShader("./include/fragment.glsl", FRAGMENT_SHADER);
-
-    unsigned int program  = LoadProgram(vertex, fragment);
-    unsigned int vao, vbo;
-
-    glGenVertexArrays(1, &vao);
-    glGenBuffers(1, &vbo);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBindVertexArray(vao);
-
-    glBufferData(GL_ARRAY_BUFFER, 5000 * 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
-
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(0);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    RenderScene graph;
-    InitRenderScene(&graph);
-
-    Mat4  scene_matrix = IdentityMatrix();
-    Mat4  ortho_matrix = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
-
-    Graph graphs;
-    InitGraph(&graphs);
-
-    UserData data = {.OrthoMatrix = &ortho_matrix, .graph = &graphs};
-    glfwSetWindowUserPointer(window, &data);
-
-    // PlotParametric(&graph, RoseCurves, &graphs);
-    State panner = {0};
-
-    Font  ComicSans;
-    LoadFont(&ComicSans, "./include/comic.ttf");
-
-    String str = MakeString("@ComicSans");
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // glEnable(GL_MULTISAMPLE);
-
-    // Mulitple discontinuous graphs aren't supported fully for now
-    float *x     = malloc(sizeof(float) * 10);
-    float *y     = malloc(sizeof(float) * 10);
-    int    count = 10;
-    for (int i = 0; i < 10; ++i)
-    {
-        x[i] = i;
-        y[i] = i * i;
-    }
-
-    while (!glfwWindowShouldClose(window))
-    {
-        scene_matrix = IdentityMatrix();
-        glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        ResetRenderScene(&graph);
-        FillText(&graph, &ComicSans, (MVec2){50.0f, 50.0f}, str, 0);
-
-        PlotGraph(&graph, sqrt, &graphs, (MVec3){0.0f, 0.0f, 1.0f}, "sqrt");
-        PlotGraph(&graph, GaussianIntegral, &graphs, (MVec3){0.0f, 1.0f, 0.0f}, "Gaussian");
-        // PlotGraph(&graph, cos, &graphs, (MVec3){1.0f, 0.0f, 0.0f}, "cosine");
-        PlotGraph(&graph, tanh, &graphs, (MVec3){1.0f, 0.0f, 1.0f}, "tanh");
-        ShowList(&graph, &ComicSans, &graphs, x, y, count, "List Plot", (MVec3){1.0f, 1.0f, 0.0f});
-        RenderGraph(&graphs);
-        RenderLabels(&graph, &ComicSans, &graphs, &scene_matrix);
-        glUseProgram(program);
-
-        //// implies column constitue base vectors not the other one
-        glUniformMatrix4fv(glGetUniformLocation(program, "scene"), 1, GL_TRUE, &ortho_matrix.elem[0][0]);
-
-        glBindVertexArray(vao);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-        DrawLegends(&graph, &ComicSans, &graphs);
-        RenderRenderScene(&graph, program, false);
-
-        RenderFont(&graph, &ComicSans, &ortho_matrix);
-        // glBindVertexArray(0);
-        HandleEvents(window, &panner, &graphs);
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
-
-    glfwDestroyWindow(window);
-    glfwTerminate();
-    return 0;
-}
-
-void HandleEvents(GLFWwindow *window, State *state, Graph *graph)
-{
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
     {
         double xpos, ypos;
         glfwGetCursorPos(window, &xpos, &ypos);
@@ -6875,12 +6913,14 @@ void HandleEvents(GLFWwindow *window, State *state, Graph *graph)
             break;
         case true:
         {
-            double delX = xpos - state->xpos;
-            double delY = ypos - state->ypos;
-            graph->center.x += delX;
-            graph->center.y -= delY;
-            state->xpos = xpos;
-            state->ypos = ypos;
+            double delX      = xpos - state->xpos;
+            double delY      = ypos - state->ypos;
+
+            Mat4   translate = TranslationMatrix(delX, -delY, 0.0f);
+            *world_matrix    = MatrixMultiply(&translate, world_matrix);
+
+            state->xpos      = xpos;
+            state->ypos      = ypos;
         }
         }
     }
@@ -6891,19 +6931,19 @@ void HandleEvents(GLFWwindow *window, State *state, Graph *graph)
 // Functions related to API
 // To expose to API we need two sets of data .. first the original values and second scaled values
 
-void APIRecalculate(MorphPlotDevice *device)
-{
-    device->render_scene->vCount = 0;
-    MVec2 vec;
-    for (int re = 0; re < device->render_scene->pCount; ++re)
-    {
-        vec.x = device->graph->center.x +
-                device->render_scene->Points[re].x * device->graph->slide_scale.x / (device->graph->scale.x);
-        vec.y = device->graph->center.y +
-                device->render_scene->Points[re].y * device->graph->slide_scale.y / (device->graph->scale.y);
-        AddSingleVertex(device->render_scene, vec);
-    }
-}
+// void APIRecalculate(MorphPlotDevice *device)
+//{
+//     device->render_scene->vCount = 0;
+//     MVec2 vec;
+//     for (int re = 0; re < device->render_scene->pCount; ++re)
+//     {
+//         vec.x = device->graph->center.x +
+//                 device->render_scene->Points[re].x * device->graph->slide_scale.x / (device->graph->scale.x);
+//         vec.y = device->graph->center.y +
+//                 device->render_scene->Points[re].y * device->graph->slide_scale.y / (device->graph->scale.y);
+//         AddSingleVertex(device->render_scene, vec);
+//     }
+// }
 
 Shader LoadShadersFromString(const char *cstr, ShaderType type)
 {
@@ -6958,39 +6998,36 @@ MorphPlotDevice MorphCreateDevice()
 
     device.program = LoadProgram(vertex, fragment);
 
-    glGenVertexArrays(1, &device.vao);
-    glGenBuffers(1, &device.vbo);
+    // Enable the multi sampling
+    glEnable(GL_MULTISAMPLE);
 
-    glBindBuffer(GL_ARRAY_BUFFER, device.vbo);
-    glBindVertexArray(device.vao);
-
-    // magic constant 5000 is total number of vertices allowed
-    glBufferData(GL_ARRAY_BUFFER, 5000 * 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
-
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(0);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    // Enable the multi sampling 
-    glEnable(GL_MULTISAMPLE); 
-
-    RenderScene *scene = malloc(sizeof(*scene));
-    InitRenderScene(scene);
+    Scene *scene = malloc(sizeof(*scene));
+    Init2DScene(scene);
 
     Mat4 *ortho_matrix = malloc(sizeof(Mat4));
-    *ortho_matrix      = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
+    if (ortho_matrix)
+        *ortho_matrix = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
 
-    Graph *graph       = malloc(sizeof(*graph));
+    Mat4 *world_matrix = malloc(sizeof(Mat4));
+    if (world_matrix)
+        /**world_matrix = TranslationMatrix(400,400,0);*/
+        *world_matrix = IdentityMatrix();
+
+    Mat4 *scale_matrix = malloc(sizeof(Mat4));
+    if (scale_matrix)
+        *scale_matrix = IdentityMatrix();
+
+    Graph *graph = malloc(sizeof(*graph));
     InitGraph(graph);
 
     UserData *data = malloc(sizeof(*data));
-    *data          = (UserData){.OrthoMatrix = ortho_matrix, .graph = graph};
+    if (data)
+        *data = (UserData){.OrthoMatrix = ortho_matrix, .graph = graph, .scale_transform = scale_matrix};
     glfwSetWindowUserPointer(device.window, data);
 
     device.panner = malloc(sizeof(*device.panner));
-    memset(device.panner,0,sizeof(*device.panner));
+    if (device.panner)
+        memset(device.panner, 0, sizeof(*device.panner));
 
     Font *ComicSans = malloc(sizeof(*ComicSans));
     // LoadFont(ComicSans, "./include/comic.ttf");
@@ -6998,10 +7035,12 @@ MorphPlotDevice MorphCreateDevice()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    device.render_scene = scene;
-    device.graph        = graph;
-    device.font         = ComicSans;
-    device.transform    = ortho_matrix;
+    device.scene           = scene;
+    device.graph           = graph;
+    device.font            = ComicSans;
+    device.transform       = ortho_matrix;
+    device.world_transform = world_matrix;
+    device.scale_matrix    = scale_matrix;
 
 // Initialize timer here
 #ifdef _WIN32
@@ -7013,57 +7052,57 @@ MorphPlotDevice MorphCreateDevice()
 #elif defined(__linux__)
     // using monotonic clock instead of realtime
     struct timespec ts;
-    clock_getres(CLOCK_MONOTONIC,&ts);
-    device.timer.frequency = (uint64_t)(1000000000ULL/ts.tv_nsec);
-    clock_gettime(CLOCK_MONOTONIC,&ts);
-    device.timer.count = (uint64_t)(ts.tv_sec * device.timer.frequency + ts.tv_nsec * device.timer.frequency/1000000000ULL);
+    clock_getres(CLOCK_MONOTONIC, &ts);
+    device.timer.frequency = (uint64_t)(1000000000ULL / ts.tv_nsec);
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    device.timer.count =
+        (uint64_t)(ts.tv_sec * device.timer.frequency + ts.tv_nsec * device.timer.frequency / 1000000000ULL);
 #endif
-
 
     device.should_close = false;
     return device;
 }
+//
+// void MorphPlotFunc(MorphPlotDevice *device, ParametricFn1D fn, MVec3 rgb, float xstart, float xend,
+//                   const char *cstronly, float samplesize)
+//{
+//    float init = -10.0f;
+//    float term = 10.0f;
+//    float step = 0.05f;
+//    if (fabsf(xstart - xend) > FLT_EPSILON)
+//    {
+//        init = xstart > xend ? xend : xstart;
+//        term = xstart > xend ? xstart : xend;
+//    }
+//    if (samplesize > FLT_EPSILON)
+//        step = samplesize;
+//    MVec2 vec;
+//
+//    for (float x = init; x <= term; x += step)
+//    {
+//        // This API version doesn't check for discontinuity .. Above function checks for discontinuity of one function
+//        vec.x = x;
+//        vec.y = fn(vec.x);
+//        AddSinglePoint(device->render_scene, vec);
+//    }
+//    // Add number of vertices in the current graph
+//    assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
+//    device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
+//    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = rgb;
+//    device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
+//}
 
-void MorphPlotFunc(MorphPlotDevice *device, ParametricFn1D fn, MVec3 rgb, float xstart, float xend,
-                   const char *cstronly, float samplesize)
-{
-    float init = -10.0f;
-    float term = 10.0f;
-    float step = 0.05f;
-    if (fabsf(xstart - xend) > FLT_EPSILON)
-    {
-        init = xstart > xend ? xend : xstart;
-        term = xstart > xend ? xstart : xend;
-    }
-    if (samplesize > FLT_EPSILON)
-        step = samplesize;
-    MVec2 vec;
-
-    for (float x = init; x <= term; x += step)
-    {
-        // This API version doesn't check for discontinuity .. Above function checks for discontinuity of one function
-        vec.x = x;
-        vec.y = fn(vec.x);
-        AddSinglePoint(device->render_scene, vec);
-    }
-    // Add number of vertices in the current graph
-    assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
-    device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
-    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = rgb;
-    device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
-}
-
-void MorphParametric2DPlot(MorphPlotDevice *device, ParametricFn2D fn, float tInit, float tTerm, MVec3 rgb,
-                           const char *cstronly, float step)
-{
-    MVec2 vec;
-    for (float t = tInit; t <= tTerm; t += step)
-        AddSinglePoint(device->render_scene, fn(t));
-    assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
-    device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
-    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = rgb;
-    device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
-}
+// void MorphParametric2DPlot(MorphPlotDevice *device, ParametricFn2D fn, float tInit, float tTerm, MVec3 rgb,
+//                            const char *cstronly, float step)
+//{
+//     MVec2 vec;
+//     for (float t = tInit; t <= tTerm; t += step)
+//         AddSinglePoint(device->render_scene, fn(t));
+//     assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
+//     device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
+//     device->render_scene->graphcolor[device->render_scene->graphcount - 1] = rgb;
+//     device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
+// }
 
 double MorphTimeSinceCreation(MorphPlotDevice *device)
 {
@@ -7074,93 +7113,92 @@ double MorphTimeSinceCreation(MorphPlotDevice *device)
     elapsed_time = (((uint64_t)counter.QuadPart - device->timer.count) * 1.0) / device->timer.frequency;
 #elif defined(__linux__)
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC,&ts);
-    uint64_t count = ts.tv_sec * device->timer.frequency + ts.tv_nsec * device->timer.frequency/1000000000ULL;
-    elapsed_time = (((uint64_t)count - device->timer.count) * 1.0) / device->timer.frequency;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t count = ts.tv_sec * device->timer.frequency + ts.tv_nsec * device->timer.frequency / 1000000000ULL;
+    elapsed_time   = (((uint64_t)count - device->timer.count) * 1.0) / device->timer.frequency;
 #endif
 
     return elapsed_time;
 }
-
-void APIReset(MorphPlotDevice *device, uint32_t hold)
-{
-    device->render_scene->fCount     = 0;
-    device->render_scene->graphcount = hold;
-}
+//
+// void APIReset(MorphPlotDevice *device, uint32_t hold)
+//{
+//    device->render_scene->fCount     = 0;
+//    device->render_scene->graphcount = hold;
+//}
 
 bool MorphShouldWindowClose(MorphPlotDevice *device)
 {
     return device->should_close;
 }
 
-void MorphShow(MorphPlotDevice *device)
-{
-    glfwShowWindow(device->window);
-    State    panner = {0};
+// void MorphShow(MorphPlotDevice *device)
+//{
+//     glfwShowWindow(device->window);
+//     State    panner = {0};
+//
+//     uint32_t hold   = device->render_scene->graphcount;
+//
+//     while (!glfwWindowShouldClose(device->window))
+//     {
+//         glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
+//         glClear(GL_COLOR_BUFFER_BIT);
+//         // Instead of re-rendering, change the scale of the already plotted points
+//         APIReset(device, hold);
+//         APIRecalculate(device);
+//         RenderGraph(device->graph);
+//         glUseProgram(device->program);
+//         glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE,
+//         &device->transform->elem[0][0]); glBindVertexArray(device->vao); glBindBuffer(GL_ARRAY_BUFFER, device->vbo);
+//
+//         RenderLabels(device->render_scene, device->font, device->graph, device->transform);
+//         DrawLegends(device->render_scene, device->font, device->graph);
+//         RenderRenderScene(device->render_scene, device->program, false);
+//         RenderFont(device->render_scene, device->font, device->transform);
+//
+//         HandleEvents(device->window, &panner, device->graph);
+//         glfwSwapBuffers(device->window);
+//         glfwPollEvents();
+//     }
+// }
 
-    uint32_t hold   = device->render_scene->graphcount;
-
-    while (!glfwWindowShouldClose(device->window))
-    {
-        glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        // Instead of re-rendering, change the scale of the already plotted points
-        APIReset(device, hold);
-        APIRecalculate(device);
-        RenderGraph(device->graph);
-        glUseProgram(device->program);
-        glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE, &device->transform->elem[0][0]);
-        glBindVertexArray(device->vao);
-        glBindBuffer(GL_ARRAY_BUFFER, device->vbo);
-
-        RenderLabels(device->render_scene, device->font, device->graph, device->transform);
-        DrawLegends(device->render_scene, device->font, device->graph);
-        RenderRenderScene(device->render_scene, device->program, false);
-        RenderFont(device->render_scene, device->font, device->transform);
-
-        HandleEvents(device->window, &panner, device->graph);
-        glfwSwapBuffers(device->window);
-        glfwPollEvents();
-    }
-}
-
-void MorphPhantomShow(MorphPlotDevice *device)
-{
-    uint32_t hold = device->render_scene->graphcount;
-
-    glfwShowWindow(device->window);
-    glfwMakeContextCurrent(device->window);
-
-    glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    APIReset(device, hold);
-    APIRecalculate(device);
-    RenderGraph(device->graph);
-
-    glUseProgram(device->program);
-    glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE, &device->transform->elem[0][0]);
-    glBindVertexArray(device->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, device->vbo);
-
-    RenderLabels(device->render_scene, device->font, device->graph, device->transform);
-    DrawLegends(device->render_scene, device->font, device->graph);
-    RenderRenderScene(device->render_scene, device->program, false);
-    RenderFont(device->render_scene, device->font, device->transform);
-
-    glfwSwapBuffers(device->window);
-
-    HandleEvents(device->window,device->panner,device->graph);
-    glfwPollEvents();
-
-    device->render_scene->graphcount -= hold + 1;
-    device->should_close = glfwWindowShouldClose(device->window); 
-}
+// void MorphPhantomShow(MorphPlotDevice *device)
+//{
+//     uint32_t hold = device->render_scene->graphcount;
+//
+//     glfwShowWindow(device->window);
+//     glfwMakeContextCurrent(device->window);
+//
+//     glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
+//     glClear(GL_COLOR_BUFFER_BIT);
+//
+//     APIReset(device, hold);
+//     APIRecalculate(device);
+//     RenderGraph(device->graph);
+//
+//     glUseProgram(device->program);
+//     glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE, &device->transform->elem[0][0]);
+//     glBindVertexArray(device->vao);
+//     glBindBuffer(GL_ARRAY_BUFFER, device->vbo);
+//
+//     RenderLabels(device->render_scene, device->font, device->graph, device->transform);
+//     DrawLegends(device->render_scene, device->font, device->graph);
+//     RenderRenderScene(device->render_scene, device->program, false);
+//     RenderFont(device->render_scene, device->font, device->transform);
+//
+//     glfwSwapBuffers(device->window);
+//
+//     HandleEvents(device->window, device->panner, device->graph);
+//     glfwPollEvents();
+//
+//     device->render_scene->graphcount -= hold + 1;
+//     device->should_close = glfwWindowShouldClose(device->window);
+// }
 
 void MorphDestroyDevice(MorphPlotDevice *device)
 {
-    DestroyRenderScene(device->render_scene);
-    free(device->render_scene);
+    Destroy2DScene(device->scene);
+    free(device->scene);
     UserData *data = glfwGetWindowUserPointer(device->window);
     free(data);
     free(device->transform);
@@ -7170,23 +7208,57 @@ void MorphDestroyDevice(MorphPlotDevice *device)
     glfwTerminate();
 }
 
-void MorphPlotList(MorphPlotDevice *device, float *x, float *y, int length, MVec3 rgb, const char *cstronly)
-{
-    for (int points = 0; points < length; ++points)
-        AddSinglePoint(device->render_scene, (MVec2){x[points], y[points]});
+// void MorphPlotList(MorphPlotDevice *device, float *x, float *y, int length, MVec3 rgb, const char *cstronly)
+//{
+//     for (int points = 0; points < length; ++points)
+//         AddSinglePoint(device->render_scene, (MVec2){x[points], y[points]});
+//
+//     assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
+//     device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
+//     device->render_scene->graphcolor[device->render_scene->graphcount - 1] = rgb;
+//     device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
+// }
 
-    assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
-    device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
-    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = rgb;
-    device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
-}
-
-void MorphResetPlotting(MorphPlotDevice *device)
-{
-    ResetRenderScene(device->render_scene);
-}
+// void MorphResetPlotting(MorphPlotDevice *device)
+//{
+//     ResetRenderScene(device->render_scene);
+// }
 
 void ImplicitFunctionPlot2D(MorphPlotDevice *device, ImplicitFn2D fn)
 {
+}
 
+double Square(double x)
+{
+    return x * x;
+}
+
+int main(int argc, char **argv)
+{
+    MorphPlotDevice device = MorphCreateDevice();
+    glfwShowWindow(device.window);
+    glfwMakeContextCurrent(device.window);
+
+    Plot1D(device.scene, GaussianIntegral, device.graph, (MVec3){0.6f, 0.4f, 0.1f}, "Nothing");
+    PrepareScene(device.scene, device.graph);
+
+    Mat4 matrix;
+    while (!glfwWindowShouldClose(device.window))
+    {
+
+        RenderGraph(device.graph, device.world_transform);
+
+        matrix = MatrixMultiply(device.world_transform, device.scale_matrix);
+        matrix = MatrixMultiply(device.transform, &matrix);
+
+        RenderScene(device.scene, device.program, false, &matrix);
+
+        HandleEvents(device.window, device.panner, device.graph, device.world_transform);
+
+        glfwSwapBuffers(device.window);
+        glfwPollEvents();
+    }
+
+    MorphDestroyDevice(&device);
+    return 0;
 }
