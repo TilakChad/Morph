@@ -6024,7 +6024,8 @@ typedef struct
 typedef enum
 {
     VERTEX_SHADER,
-    FRAGMENT_SHADER
+    FRAGMENT_SHADER,
+    GEOMETRY_SHADER
 } ShaderType;
 
 typedef struct
@@ -6033,6 +6034,20 @@ typedef struct
     ShaderType   type;
 } Shader;
 
+const char *ShaderTypeName(ShaderType shader)
+{
+    switch (shader)
+    {
+    case VERTEX_SHADER:
+        return "Vertex Shader";
+    case FRAGMENT_SHADER:
+        return "Fragment Shader";
+    case GEOMETRY_SHADER:
+        return "Geometry Shader";
+    default:
+        __assume(false);
+    }
+}
 void ErrorCallback(int code, const char *description)
 {
     fprintf(stderr, "\nGLFW Error -> %s.\n", description);
@@ -6156,6 +6171,37 @@ unsigned int LoadProgram(Shader vertex, Shader fragment)
 
     glLinkProgram(program);
 
+    glHint(GL_LINE_SMOOTH, GL_NICEST);
+
+    int linked = 0;
+
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (!linked)
+    {
+        char infoLog[512];
+        glGetProgramInfoLog(program, 512, NULL, infoLog);
+        fprintf(stderr, "Failed to link program \n -> %s.", infoLog);
+        return -1;
+    }
+    return program;
+}
+
+unsigned int LoadProgram3(Shader vertex, Shader fragment, Shader geometry)
+{
+    if (vertex.type != VERTEX_SHADER && fragment.type != FRAGMENT_SHADER && geometry.type != GEOMETRY_SHADER)
+    {
+        fprintf(stderr, "Shaders mismatched for program\n");
+        return -1;
+    }
+
+    unsigned int program = glCreateProgram();
+    glAttachShader(program, vertex.shader);
+    glAttachShader(program, fragment.shader);
+    glAttachShader(program, geometry.shader);
+
+    glLinkProgram(program);
+    glHint(GL_LINE_SMOOTH, GL_NICEST);
+
     int linked = 0;
 
     glGetProgramiv(program, GL_LINK_STATUS, &linked);
@@ -6203,8 +6249,10 @@ Shader LoadShader(const char *shader_path, ShaderType type)
     case VERTEX_SHADER:
         shader_define = GL_VERTEX_SHADER;
         break;
+    case GEOMETRY_SHADER:
+        shader_define = GL_GEOMETRY_SHADER;
     default:
-        TriggerBreakpoint();
+        __assume(false); 
     }
     shader.shader = glCreateShader(shader_define);
     shader.type   = type;
@@ -6220,12 +6268,12 @@ Shader LoadShader(const char *shader_path, ShaderType type)
         char infoLog[512];
         glGetShaderInfoLog(shader.shader, 512, NULL, infoLog);
         fprintf(stderr, "Failed to compile %s",
-                (shader_define == GL_VERTEX_SHADER ? "vertex shader" : "fragment shader"));
+                ShaderTypeName(type));
         fprintf(stderr, "Reason -> %s.", infoLog);
     }
     else
         fprintf(stderr, "\n%s compilation passed.\n",
-                (shader_define == GL_VERTEX_SHADER ? "vertex shader" : "fragment shader"));
+                ShaderTypeName(type));
     return shader;
 }
 
@@ -6290,14 +6338,20 @@ typedef struct GPUBatch
     Primitives   primitive;
 } GPUBatch;
 
+typedef struct VertexData2D
+{
+    float x, y;
+    float n_x, n_y;
+} VertexData2D;
+
 typedef struct FunctionPlotData
 {
-    GPUBatch *batch;
-    uint32_t  max;
-    uint32_t  count;
-    MVec3     color;
-    MVec2    *samples;
-    char      plot_name[25];
+    GPUBatch     *batch;
+    uint32_t      max;
+    uint32_t      count;
+    MVec3         color;
+    VertexData2D *samples;
+    char          plot_name[25];
 } FunctionPlotData;
 
 typedef struct FontData
@@ -6346,7 +6400,7 @@ GPUBatch *CreateNewBatch(Primitives primitive)
     glBindBuffer(GL_ARRAY_BUFFER, batch->vertex_buffer.vbo);
     glBufferData(GL_ARRAY_BUFFER, batch->vertex_buffer.max * batch->vertex_buffer.max, NULL, GL_STATIC_DRAW);
 
-    batch->vertex_buffer.max   = 1000;
+    batch->vertex_buffer.max   = 10000;
     batch->vertex_buffer.count = 0;
     batch->vertex_buffer.dirty = true;
     batch->vertex_buffer.data  = malloc(sizeof(uint8_t) * batch->vertex_buffer.max);
@@ -6357,7 +6411,7 @@ GPUBatch *CreateNewBatch(Primitives primitive)
 void DrawBatch(GPUBatch *batch)
 {
     glBindVertexArray(batch->vao);
-    glDrawArrays(batch->primitive, 0, batch->vertex_buffer.count / (2 * 4));
+    glDrawArrays(batch->primitive, 0, batch->vertex_buffer.count / (4 * 4));
 }
 
 void PrepareBatch(GPUBatch *batch)
@@ -6371,8 +6425,11 @@ void PrepareBatch(GPUBatch *batch)
         memcpy(access, batch->vertex_buffer.data, sizeof(uint8_t) * batch->vertex_buffer.count);
         glUnmapBuffer(GL_ARRAY_BUFFER);
 
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), NULL);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), NULL);
         glEnableVertexAttribArray(0);
+
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (const void *)(2 * sizeof(float)));
+        glEnableVertexAttribArray(1);
 
         batch->vertex_buffer.dirty = false;
     }
@@ -6464,23 +6521,24 @@ void Init2DScene(Scene *scene)
     scene->fonts.fonts = malloc(sizeof(*scene->fonts.fonts) * scene->fonts.max);
 }
 
-void RenderScene(Scene *scene, unsigned int program, bool showPoints, Mat4 *transform)
+void RenderScene(Scene *scene, unsigned int program, bool showPoints, Mat4 *mscene, Mat4* transform)
 {
-    glLineWidth(6);
+    glLineWidth(10);
     glUseProgram(program);
-    glUniformMatrix4fv(glGetUniformLocation(program, "scene"), 1, GL_TRUE, &transform->elem[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(program, "scene"), 1, GL_TRUE, &mscene->elem[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_TRUE, &transform->elem[0][0]);
 
     for (uint32_t graph = 0; graph < scene->plots.count; ++graph)
     {
         FunctionPlotData *function = &scene->plots.functions[graph];
-        glUniform3f(glGetUniformLocation(program, "inColor"), 0.5f, 0.3f, 0.1f);
+        glUniform3f(glGetUniformLocation(program, "inColor"), 0.9f, 0.3f, 0.1f);
         // Transfer data to the batch
         if (function->batch == NULL)
         {
             function->batch = CreateNewBatch(LINE_STRIP);
-            assert(function->count * 2 * 4 < function->batch->vertex_buffer.max);
-            memcpy(function->batch->vertex_buffer.data, function->samples, sizeof(uint8_t) * function->count * 2 * 4);
-            function->batch->vertex_buffer.count = function->count * 2 * 4;
+            assert(function->count * 4 * 4 < function->batch->vertex_buffer.max);
+            memcpy(function->batch->vertex_buffer.data, function->samples, sizeof(uint8_t) * function->count * 4 * 4);
+            function->batch->vertex_buffer.count = function->count * 4 * 4;
         }
         PrepareBatch(function->batch);
         DrawBatch(function->batch);
@@ -6550,14 +6608,25 @@ static void Plot1D(Scene *scene, ParametricFn1D func, Graph *graph, MVec3 color,
 
     FunctionPlotData *function                         = &scene->plots.functions[scene->plots.count];
 
-    MVec2             vec;
+    VertexData2D      vec;
+    vec.x                                = init;
+    vec.y                                = func(vec.x);
+    vec.n_x                              = 1.0f;
+    vec.n_y                              = 1.0f;
 
-    for (float x = init; x <= term; x += step)
+    function->samples[function->count++] = vec;
+
+    float n_x, n_y;
+    for (float x = init + step; x <= term; x += step)
     {
         vec.x = x;
         vec.y = func(vec.x);
         assert(function->count < function->max);
-        function->samples[function->count++] = vec;
+        n_x                                        = x - function->samples[function->count - 1].x;
+        n_y                                        = vec.y - function->samples[function->count - 1].y;
+        function->samples[function->count - 1].n_x = n_x;
+        function->samples[function->count - 1].n_y = n_y;
+        function->samples[function->count++]       = vec;
     }
 
     scene->plots.count++;
@@ -6957,6 +7026,8 @@ Shader LoadShadersFromString(const char *cstr, ShaderType type)
     case VERTEX_SHADER:
         shader_define = GL_VERTEX_SHADER;
         break;
+    case GEOMETRY_SHADER:
+        shader_define = GL_GEOMETRY_SHADER;
     default:
         TriggerBreakpoint();
     }
@@ -6971,13 +7042,11 @@ Shader LoadShadersFromString(const char *cstr, ShaderType type)
     {
         char infoLog[512];
         glGetShaderInfoLog(shader.shader, 512, NULL, infoLog);
-        fprintf(stderr, "Failed to compile %s",
-                (shader_define == GL_VERTEX_SHADER ? "vertex shader" : "fragment shader"));
+        fprintf(stderr, "Failed to compile %s", ShaderTypeName(shader.type));
         fprintf(stderr, "Reason -> %s.", infoLog);
     }
     else
-        fprintf(stderr, "\n%s compilation passed.\n",
-                (shader_define == GL_VERTEX_SHADER ? "vertex shader" : "fragment shader"));
+        fprintf(stderr, "\n%s compilation passed.\n", ShaderTypeName(shader.type));
     return shader;
 }
 
@@ -6985,18 +7054,24 @@ MorphPlotDevice MorphCreateDevice()
 {
     MorphPlotDevice device;
 
-    device.window = LoadGLFW(screen_width, screen_height, "Graph FFI");
+    device.window = LoadGLFW(screen_width, screen_height, "Morph Graph");
 
-    Shader vertex =
-        LoadShadersFromString("#version 330 core \r\nlayout (location = 0) in vec2 aPos; \r\n\r\nuniform mat4 scene; "
-                              "\r\n\r\nvoid main() \r\n{\r\n\tgl_Position = scene * vec4(aPos,0.0f,1.0f);\r\n}",
-                              VERTEX_SHADER);
-    Shader fragment = LoadShadersFromString(
-        "#version 330 core \r\n\r\nuniform vec3 inColor; \r\nout vec4 color; \r\nvoid main()\r\n{\r\n\t// "
-        "color = vec4(0.0f,1.0f,0.0f,1.0f);\r\n\tcolor = vec4(inColor,1.0f);\r\n}",
-        FRAGMENT_SHADER);
+    // Shader vertex =
+    //     LoadShadersFromString("#version 330 core \r\nlayout (location = 0) in vec2 aPos; \r\n\r\nuniform mat4 scene;
+    //     "
+    //                           "\r\n\r\nvoid main() \r\n{\r\n\tgl_Position = scene * vec4(aPos,0.0f,1.0f);\r\n}",
+    //                           VERTEX_SHADER);
 
-    device.program = LoadProgram(vertex, fragment);
+    // Shader fragment = LoadShadersFromString(
+    //     "#version 330 core \r\n\r\nuniform vec3 inColor; \r\nout vec4 color; \r\nvoid main()\r\n{\r\n\t// "
+    //     "color = vec4(0.0f,1.0f,0.0f,1.0f);\r\n\tcolor = vec4(inColor,1.0f);\r\n}",
+    //     FRAGMENT_SHADER);
+
+    Shader vertex   = LoadShader("./src/shader/aaline.vs", VERTEX_SHADER);
+    Shader fragment = LoadShader("./src/shader/aaline.fs", FRAGMENT_SHADER);
+    Shader geometry = LoadShader("./src/shader/aaline.gs", GEOMETRY_SHADER);
+
+    device.program  = LoadProgram3(vertex, fragment, geometry);
 
     // Enable the multi sampling
     glEnable(GL_MULTISAMPLE);
@@ -7243,15 +7318,16 @@ int main(int argc, char **argv)
     PrepareScene(device.scene, device.graph);
 
     Mat4 matrix;
+    glClearColor(0.05f, 0.1f, 0.4f, 1.0f);
     while (!glfwWindowShouldClose(device.window))
     {
-
-        RenderGraph(device.graph, device.world_transform);
+        glClear(GL_COLOR_BUFFER_BIT);
+        // RenderGraph(device.graph, device.world_transform);
 
         matrix = MatrixMultiply(device.world_transform, device.scale_matrix);
-        matrix = MatrixMultiply(device.transform, &matrix);
+        //matrix = MatrixMultiply(device.transform, &matrix);
 
-        RenderScene(device.scene, device.program, false, &matrix);
+        RenderScene(device.scene, device.program, false, device.transform, &matrix);
 
         HandleEvents(device.window, device.panner, device.graph, device.world_transform);
 
