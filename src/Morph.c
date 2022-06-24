@@ -6171,8 +6171,6 @@ unsigned int LoadProgram(Shader vertex, Shader fragment)
 
     glLinkProgram(program);
 
-    glHint(GL_LINE_SMOOTH, GL_NICEST);
-
     int linked = 0;
 
     glGetProgramiv(program, GL_LINK_STATUS, &linked);
@@ -6366,6 +6364,7 @@ typedef struct PlotArray
 {
     uint32_t          max;
     uint32_t          count;
+    int32_t           current_selection; 
     FunctionPlotData *functions;
 } PlotArray;
 
@@ -6378,6 +6377,7 @@ typedef struct FontArray
 
 typedef struct Scene
 {
+    
     PlotArray plots;
     FontArray fonts;
 } Scene;
@@ -6510,6 +6510,8 @@ void Init2DScene(Scene *scene)
     // Init enough memory for 10 graphs
     scene->plots.max       = 10;
     scene->plots.functions = malloc(sizeof(*scene->plots.functions) * scene->plots.max);
+    scene->plots.current_selection = -1; 
+
     for (uint32_t plot = 0; plot < scene->plots.max; ++plot)
     {
         /*scene->plots.functions[plot].batch = NULL;
@@ -6531,7 +6533,7 @@ void RenderScene(Scene *scene, unsigned int program, bool showPoints, Mat4 *msce
     for (uint32_t graph = 0; graph < scene->plots.count; ++graph)
     {
         FunctionPlotData *function = &scene->plots.functions[graph];
-        glUniform3f(glGetUniformLocation(program, "inColor"), 0.9f, 0.3f, 0.1f);
+        glUniform3f(glGetUniformLocation(program, "inColor"), 0.0f, 0.85f, 0.1f);
         // Transfer data to the batch
         if (function->batch == NULL)
         {
@@ -6604,7 +6606,7 @@ static void Plot1D(Scene *scene, ParametricFn1D func, Graph *graph, MVec3 color,
 
     float             init                             = -10.0f;
     float             term                             = 10.0f;
-    float             step                             = 0.2f;
+    float             step                             = 0.1f;
 
     FunctionPlotData *function                         = &scene->plots.functions[scene->plots.count];
 
@@ -7315,6 +7317,7 @@ int main(int argc, char **argv)
     glfwMakeContextCurrent(device.window);
 
     Plot1D(device.scene, GaussianIntegral, device.graph, (MVec3){0.6f, 0.4f, 0.1f}, "Nothing");
+    Plot1D(device.scene, Square, device.graph, (MVec3){0.6f,0.4f,0.1f},"Squared");
     PrepareScene(device.scene, device.graph);
 
     Mat4 matrix;
@@ -7322,7 +7325,7 @@ int main(int argc, char **argv)
     while (!glfwWindowShouldClose(device.window))
     {
         glClear(GL_COLOR_BUFFER_BIT);
-        // RenderGraph(device.graph, device.world_transform);
+        RenderGraph(device.graph, device.world_transform);
 
         matrix = MatrixMultiply(device.world_transform, device.scale_matrix);
         //matrix = MatrixMultiply(device.transform, &matrix);
