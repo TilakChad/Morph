@@ -6250,7 +6250,7 @@ Shader LoadShader(const char *shader_path, ShaderType type)
     case GEOMETRY_SHADER:
         shader_define = GL_GEOMETRY_SHADER;
     default:
-        __assume(false); 
+        __assume(false);
     }
     shader.shader = glCreateShader(shader_define);
     shader.type   = type;
@@ -6265,13 +6265,11 @@ Shader LoadShader(const char *shader_path, ShaderType type)
     {
         char infoLog[512];
         glGetShaderInfoLog(shader.shader, 512, NULL, infoLog);
-        fprintf(stderr, "Failed to compile %s",
-                ShaderTypeName(type));
+        fprintf(stderr, "Failed to compile %s", ShaderTypeName(type));
         fprintf(stderr, "Reason -> %s.", infoLog);
     }
     else
-        fprintf(stderr, "\n%s compilation passed.\n",
-                ShaderTypeName(type));
+        fprintf(stderr, "\n%s compilation passed.\n", ShaderTypeName(type));
     return shader;
 }
 
@@ -6344,27 +6342,31 @@ typedef struct VertexData2D
 
 typedef struct FunctionPlotData
 {
-    GPUBatch     *batch;
-    uint32_t      max;
-    uint32_t      count;
-    MVec3         color;
-    VertexData2D *samples;
-    char          plot_name[25];
+    bool           updated;
+    ParametricFn1D function;
+    GPUBatch      *batch;
+    uint32_t       max;
+    uint32_t       count;
+    MVec3          color;
+    VertexData2D  *samples;
+    char           plot_name[25];
 } FunctionPlotData;
 
 typedef struct FontData
 {
-    uint32_t max;
-    MVec3    color;
-    uint32_t count;
-    MVec2   *data;
+    bool      updated;
+    GPUBatch *batch;
+    uint32_t  max;
+    MVec3     color;
+    uint32_t  count;
+    MVec2    *data;
 } FontData;
 
 typedef struct PlotArray
 {
     uint32_t          max;
     uint32_t          count;
-    int32_t           current_selection; 
+    int32_t           current_selection;
     FunctionPlotData *functions;
 } PlotArray;
 
@@ -6377,9 +6379,9 @@ typedef struct FontArray
 
 typedef struct Scene
 {
-    
     PlotArray plots;
-    FontArray fonts;
+    FontData  axes_labels;
+    FontData  legends;
 } Scene;
 
 struct State
@@ -6392,15 +6394,15 @@ struct State
 GPUBatch *CreateNewBatch(Primitives primitive)
 {
     GPUBatch *batch          = malloc(sizeof(*batch));
-    batch->vertex_buffer.max = 1000;
+    batch->vertex_buffer.max = 25000;
     batch->primitive         = primitive;
 
     glGenVertexArrays(1, &batch->vao);
     glGenBuffers(1, &batch->vertex_buffer.vbo);
     glBindBuffer(GL_ARRAY_BUFFER, batch->vertex_buffer.vbo);
-    glBufferData(GL_ARRAY_BUFFER, batch->vertex_buffer.max * batch->vertex_buffer.max, NULL, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, batch->vertex_buffer.max * sizeof(*batch->vertex_buffer.data), NULL, GL_STATIC_DRAW);
 
-    batch->vertex_buffer.max   = 10000;
+    batch->vertex_buffer.max   = 25000;
     batch->vertex_buffer.count = 0;
     batch->vertex_buffer.dirty = true;
     batch->vertex_buffer.data  = malloc(sizeof(uint8_t) * batch->vertex_buffer.max);
@@ -6408,10 +6410,10 @@ GPUBatch *CreateNewBatch(Primitives primitive)
     return batch;
 }
 
-void DrawBatch(GPUBatch *batch)
+void DrawBatch(GPUBatch *batch, uint32_t counts)
 {
     glBindVertexArray(batch->vao);
-    glDrawArrays(batch->primitive, 0, batch->vertex_buffer.count / (4 * 4));
+    glDrawArrays(batch->primitive, 0, counts);
 }
 
 void PrepareBatch(GPUBatch *batch)
@@ -6508,9 +6510,9 @@ void Init2DScene(Scene *scene)
 {
     memset(scene, 0, sizeof(*scene));
     // Init enough memory for 10 graphs
-    scene->plots.max       = 10;
-    scene->plots.functions = malloc(sizeof(*scene->plots.functions) * scene->plots.max);
-    scene->plots.current_selection = -1; 
+    scene->plots.max               = 10;
+    scene->plots.functions         = malloc(sizeof(*scene->plots.functions) * scene->plots.max);
+    scene->plots.current_selection = -1;
 
     for (uint32_t plot = 0; plot < scene->plots.max; ++plot)
     {
@@ -6519,31 +6521,40 @@ void Init2DScene(Scene *scene)
         memset(scene->plots.functions + plot, 0, sizeof(*scene->plots.functions));
     }
 
-    scene->fonts.max   = 10;
-    scene->fonts.fonts = malloc(sizeof(*scene->fonts.fonts) * scene->fonts.max);
+    scene->axes_labels.count   = 0;
+    scene->axes_labels.max     = 100000;
+    scene->axes_labels.batch   = CreateNewBatch(TRIANGLES);
+    scene->axes_labels.updated = true;
+    scene->axes_labels.data    = malloc(sizeof(*scene->axes_labels.data) * scene->axes_labels.max);
 }
 
-void RenderScene(Scene *scene, unsigned int program, bool showPoints, Mat4 *mscene, Mat4* transform)
+void RenderScene(Scene *scene, unsigned int program, bool showPoints, Mat4 *mscene, Mat4 *transform)
 {
-    glLineWidth(10);
     glUseProgram(program);
     glUniformMatrix4fv(glGetUniformLocation(program, "scene"), 1, GL_TRUE, &mscene->elem[0][0]);
     glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_TRUE, &transform->elem[0][0]);
 
+    
     for (uint32_t graph = 0; graph < scene->plots.count; ++graph)
     {
         FunctionPlotData *function = &scene->plots.functions[graph];
-        glUniform3f(glGetUniformLocation(program, "inColor"), 0.0f, 0.85f, 0.1f);
+        glUniform3f(glGetUniformLocation(program, "inColor"), function->color.x, function->color.y, function->color.z);
         // Transfer data to the batch
-        if (function->batch == NULL)
+        glUniform1f(glGetUniformLocation(program,"thickness"),3.0f); 
+        if(scene->plots.current_selection == graph) 
+            glUniform1f(glGetUniformLocation(program,"thickness"),5.0f);
+
+        if (function->updated)
         {
-            function->batch = CreateNewBatch(LINE_STRIP);
             assert(function->count * 4 * 4 < function->batch->vertex_buffer.max);
             memcpy(function->batch->vertex_buffer.data, function->samples, sizeof(uint8_t) * function->count * 4 * 4);
             function->batch->vertex_buffer.count = function->count * 4 * 4;
+            function->updated                    = false;
+            function->batch->vertex_buffer.dirty = true;
         }
+
         PrepareBatch(function->batch);
-        DrawBatch(function->batch);
+        DrawBatch(function->batch, function->batch->vertex_buffer.count / (4 * 4));
     }
 }
 
@@ -6630,7 +6641,10 @@ static void Plot1D(Scene *scene, ParametricFn1D func, Graph *graph, MVec3 color,
         function->samples[function->count - 1].n_y = n_y;
         function->samples[function->count++]       = vec;
     }
-
+    function->color    = color;
+    function->function = func;
+    function->batch    = CreateNewBatch(LINE_STRIP);
+    function->updated  = true;
     scene->plots.count++;
 }
 
@@ -6646,7 +6660,7 @@ void PlotParametric(Scene *scene, parametricfn func, Graph *graph)
     }*/
 }
 
-void HandleEvents(GLFWwindow *window, State *state, Graph *graph, Mat4 *world_transform);
+void HandleEvents(GLFWwindow *window, State *state, Graph *graph, Mat4 *world_transform, Mat4 *scale_matrix);
 
 typedef struct Glyph
 {
@@ -6808,114 +6822,107 @@ void LoadSystemFont(Font *font, const char *font_name)
 }
 
 // position in pixel where (0,0) is the lower left corner of the screen
-// void FillText(Scene *scene, Font *font, MVec2 position, String str, int scale)
-//{
-//    // its quite straightforward
-//    int32_t x = position.x;
-//    int32_t y = position.y;
-//
-//    float   tex0, tex1;
-//
-//    for (uint32_t i = 0; i < str.length; ++i)
-//    {
-//        int   count = scene_group->fCount;
-//        Glyph glyph = font->character[(size_t)str.data[i]];
-//        int   w     = glyph.Advance;
-//        int   h     = font->height;
-//
-//        tex0        = glyph.offset.x / font->width;
-//        tex1        = (glyph.offset.x + w) / font->width;
-//        // lower left corner
-//        scene_group->fVertices[count * 12 + 0] = (MVec2){x, y};
-//        scene_group->fVertices[count * 12 + 1] = (MVec2){tex0, 1.0f};
-//        // upper left corner
-//        scene_group->fVertices[count * 12 + 2] = (MVec2){x, y + h};
-//        scene_group->fVertices[count * 12 + 3] = (MVec2){tex0, 0.0f};
-//        // upper right corner
-//        scene_group->fVertices[count * 12 + 4] = (MVec2){x + w, y + h};
-//        scene_group->fVertices[count * 12 + 5] = (MVec2){tex1, 0.0f};
-//        // lower left corner
-//        scene_group->fVertices[count * 12 + 6] = (MVec2){x + w, y};
-//        scene_group->fVertices[count * 12 + 7] = (MVec2){tex1, 1.0f};
-//        // duplicate lower left and upper right
-//        // upper right corner
-//        scene_group->fVertices[count * 12 + 8] = (MVec2){x + w, y + h};
-//        scene_group->fVertices[count * 12 + 9] = (MVec2){tex1, 0.0f};
-//        // lower left corner
-//        scene_group->fVertices[count * 12 + 10] = (MVec2){x, y};
-//        scene_group->fVertices[count * 12 + 11] = (MVec2){tex0, 1.0f};
-//
-//        x                                       = x + glyph.Advance;
-//        scene_group->fCount += 1;
-//    }
-//}
+void FillText(FontData *font_data, Font *font, MVec2 position, String str, int scale)
+{
+    // its quite straightforward
+    int32_t x = position.x;
+    int32_t y = position.y;
 
-// void RenderFont(Scene *scene, Font *font, Mat4 *scene_transform)
-//{
-//     // Allocate font storage
-//     glUseProgram(font->program);
-//     glBindVertexArray(font->vao);
-//
-//     glUniformMatrix4fv(glGetUniformLocation(font->program, "scene"), 1, GL_TRUE, &scene_transform->elem[0][0]);
-//     glBindTexture(GL_TEXTURE_2D, font->font_texture);
-//
-//     glBindBuffer(GL_ARRAY_BUFFER, font->vbo);
-//     glBufferSubData(GL_ARRAY_BUFFER, 0, scene_group->fCount * 12 * sizeof(MVec2), scene_group->fVertices);
-//     glDrawArrays(GL_TRIANGLES, 0, scene_group->fCount * 6);
-//     glBindVertexArray(0);
-//     glUseProgram(0);
-// }
+    float   tex0, tex1;
 
-// void RenderLabels(Scene *scene, Font *font, Graph *graph, Mat4 *orthoMatrix)
-//{
-//     MVec2 origin = graph->center;
-//     MVec2 position;
-//
-//     // Calculate the min and max vertical bar visible on the current frame first
-//     int xLow  = -origin.x / graph->slide_scale.x - 1;
-//     int xHigh = (screen_width - origin.x) / graph->slide_scale.x + 1;
-//
-//     for (int i = xLow * 2; i <= xHigh * 2; ++i)
-//     {
-//         position.x = origin.x + i * graph->slide_scale.x / 2 - font->height / 2;
-//         position.y = origin.y - font->height;
-//         // Now calculate the value at the position
-//
-//         // Clamp the value so that they remain inside the screen
-//         if (position.y < 0)
-//             position.y = font->height / 2;
-//         else if (position.y > screen_height)
-//             position.y = screen_height - font->height;
-//
-//         float val   = i * graph->scale.x / 2;
-//         int   count = snprintf(NULL, 0, "%3g", val);
-//         snprintf(font->font_buffer, count + 1, "%3g", val);
-//         String str = {.data = font->font_buffer, .length = count};
-//         FillText(scene, font, position, str, 0);
-//     }
-//
-//     int yLow  = -origin.y / graph->slide_scale.y - 1;
-//     int yHigh = (screen_height - origin.y) / graph->slide_scale.y + 1;
-//
-//     for (int y = yLow * 2; y <= yHigh * 2; ++y)
-//     {
-//         if (y == 0)
-//             continue;
-//         position.x = origin.x - font->height * 1.5f;
-//         position.y = origin.y + y * graph->slide_scale.y / 2 - font->height / 2;
-//
-//         if (position.x < 0)
-//             position.x = font->height;
-//         else if (position.x > screen_width)
-//             position.x = screen_width - font->height;
-//
-//         float val   = y * graph->scale.y / 2;
-//         int   count = snprintf(NULL, 0, "%3g", val);
-//         snprintf(font->font_buffer, count + 1, "%3g", val);
-//         String str = {.data = font->font_buffer, .length = count};
-//         FillText(scene, font, position, str, 0);
-//     }
-// }
+    for (uint32_t i = 0; i < str.length; ++i)
+    {
+        assert(font_data->count + 12 < font_data->max);
+        Glyph glyph      = font->character[(size_t)str.data[i]];
+        int   w          = glyph.Advance;
+        int   h          = font->height;
+
+        tex0             = glyph.offset.x / font->width;
+        tex1             = (glyph.offset.x + w) / font->width;
+
+        MVec2 vertices[] = {{x, y},     {tex0, 1.0f}, {x, y + h},     {tex0, 0.0f}, {x + w, y + h}, {tex1, 0.0f},
+                            {x + w, y}, {tex1, 1.0f}, {x + w, y + h}, {tex1, 0.0f}, {x, y},         {tex0, 1.0f}};
+
+        memcpy(font_data->data + font_data->count, vertices, sizeof(vertices));
+
+        x                = x + glyph.Advance;
+        font_data->count = font_data->count + 12;
+    }
+}
+
+void RenderFont(Scene *scene, Font *font, Mat4 *scene_transform)
+{
+    glUseProgram(font->program);
+    glUniformMatrix4fv(glGetUniformLocation(font->program, "scene"), 1, GL_TRUE, &scene_transform->elem[0][0]);
+    glActiveTexture(GL_TEXTURE0); 
+    glBindTexture(GL_TEXTURE_2D,font->font_texture); 
+
+    assert(scene->axes_labels.count * 2 * 4 < scene->axes_labels.batch->vertex_buffer.max);
+    memcpy(scene->axes_labels.batch->vertex_buffer.data, scene->axes_labels.data,
+           sizeof(uint8_t) * scene->axes_labels.count * 2 * 4);
+    scene->axes_labels.batch->vertex_buffer.count = scene->axes_labels.count * 2 * 4;
+    scene->axes_labels.batch->vertex_buffer.dirty = true;
+
+    PrepareBatch(scene->axes_labels.batch);
+    DrawBatch(scene->axes_labels.batch, scene->axes_labels.count / (2));
+}
+
+void RenderLabels(Scene *scene, Font *font, Graph *graph, Mat4 *combined_matrix)
+{
+    // These should be fine recalculating per frame
+
+    scene->axes_labels.count = 0; 
+    float vec[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    MatrixVectorMultiply(combined_matrix, vec);
+
+    MVec2 origin = (MVec2){vec[0], vec[1]};
+    MVec2 position;
+
+    // Calculate the min and max vertical bar visible on the current frame first
+    int xLow  = -origin.x / graph->slide_scale.x - 1;
+    int xHigh = (screen_width - origin.x) / graph->slide_scale.x + 1;
+
+    for (int i = xLow * 2; i <= xHigh * 2; ++i)
+    {
+        position.x = origin.x + i * graph->slide_scale.x / 2 - font->height / 2;
+        position.y = origin.y - font->height;
+        // Now calculate the value at the position
+
+        // Clamp the value so that they remain inside the screen
+        if (position.y < 0)
+            position.y = font->height / 2;
+        else if (position.y > screen_height)
+            position.y = screen_height - font->height;
+
+        float val   = i * graph->scale.x / 2;
+        int   count = snprintf(NULL, 0, "%3g", val);
+        snprintf(font->font_buffer, count + 1, "%3g", val);
+        String str = {.data = font->font_buffer, .length = count};
+        FillText(&scene->axes_labels, font, position, str, 0);
+    }
+
+    int yLow  = -origin.y / graph->slide_scale.y - 1;
+    int yHigh = (screen_height - origin.y) / graph->slide_scale.y + 1;
+
+    for (int y = yLow * 2; y <= yHigh * 2; ++y)
+    {
+        if (y == 0)
+            continue;
+        position.x = origin.x - font->height * 1.5f;
+        position.y = origin.y + y * graph->slide_scale.y / 2 - font->height / 2;
+
+        if (position.x < 0)
+            position.x = font->height;
+        else if (position.x > screen_width)
+            position.x = screen_width - font->height;
+
+        float val   = y * graph->scale.y / 2;
+        int   count = snprintf(NULL, 0, "%3g", val);
+        snprintf(font->font_buffer, count + 1, "%3g", val);
+        String str = {.data = font->font_buffer, .length = count};
+        FillText(&scene->axes_labels, font, position, str, 0);
+    }
+}
 
 // void DrawLegends(Scene *scene, Font *font, Graph *graph) // choose location automatically
 //{
@@ -6969,7 +6976,8 @@ void LoadSystemFont(Font *font, const char *font_name)
 //     scene_group->graphname[scene_group->graphcount - 1]  = GiveOnlyStaticStrings;
 // }
 
-void HandleEvents(GLFWwindow *window, State *state, Graph *graph, Mat4 *world_matrix)
+void HandleEvents(GLFWwindow *window, Scene *scene, State *state, Graph *graph, Mat4 *translate_matrix,
+                  Mat4 *scale_matrix)
 {
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
     {
@@ -6984,19 +6992,44 @@ void HandleEvents(GLFWwindow *window, State *state, Graph *graph, Mat4 *world_ma
             break;
         case true:
         {
-            double delX      = xpos - state->xpos;
-            double delY      = ypos - state->ypos;
+            double delX       = xpos - state->xpos;
+            double delY       = ypos - state->ypos;
 
-            Mat4   translate = TranslationMatrix(delX, -delY, 0.0f);
-            *world_matrix    = MatrixMultiply(&translate, world_matrix);
+            Mat4   translate  = TranslationMatrix(delX, -delY, 0.0f);
+            *translate_matrix = MatrixMultiply(&translate, translate_matrix);
 
-            state->xpos      = xpos;
-            state->ypos      = ypos;
+            state->xpos       = xpos;
+            state->ypos       = ypos;
         }
         }
     }
     else
+    {
         state->bPressed = false;
+    }
+
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    {
+        double xpos, ypos;
+        glfwGetCursorPos(window, &xpos, &ypos);
+        // use the inverse mapping to find the original vector point
+
+        float vec[]             = {xpos, screen_height - ypos, 0.0f, 1.0f};
+        Mat4  inverse_translate = TranslationMatrix(-translate_matrix->elem[0][3], -translate_matrix->elem[1][3], 0.0f);
+        Mat4  inverse_scale     = ScalarMatrix(1.0f / scale_matrix->elem[0][0], 1.0f / scale_matrix->elem[1][1], 1.0f);
+        Mat4  inverse           = MatrixMultiply(&inverse_scale, &inverse_translate);
+        MatrixVectorMultiply(&inverse, vec);
+
+        // loop through all the functions
+        for (uint32_t fn = 0; fn < scene->plots.count; ++fn)
+        {
+            if (fabs(scene->plots.functions[fn].function(vec[0]) - vec[1]) < 0.05f)
+            {
+                scene->plots.current_selection = fn;
+                break;
+            }
+        }
+    }
 }
 
 // Functions related to API
@@ -7310,30 +7343,44 @@ double Square(double x)
     return x * x;
 }
 
+#include <time.h>
+
 int main(int argc, char **argv)
 {
     MorphPlotDevice device = MorphCreateDevice();
     glfwShowWindow(device.window);
     glfwMakeContextCurrent(device.window);
 
-    Plot1D(device.scene, GaussianIntegral, device.graph, (MVec3){0.6f, 0.4f, 0.1f}, "Nothing");
-    Plot1D(device.scene, Square, device.graph, (MVec3){0.6f,0.4f,0.1f},"Squared");
+    Plot1D(device.scene, GaussianIntegral, device.graph, (MVec3){0.1f, 0.1f, 0.75f}, "Nothing");
+    Plot1D(device.scene, Square, device.graph, (MVec3){0.4f, 0.4f, 0.1f}, "Squared");
+    Plot1D(device.scene, lin, device.graph, (MVec3){0.9f, 0.1f, 0.1f}, "Squared");
     PrepareScene(device.scene, device.graph);
 
+    clock_t now = clock(), then = clock(); 
+    uint32_t count = 0; 
+
     Mat4 matrix;
-    glClearColor(0.05f, 0.1f, 0.4f, 1.0f);
     while (!glfwWindowShouldClose(device.window))
     {
-        glClear(GL_COLOR_BUFFER_BIT);
-        RenderGraph(device.graph, device.world_transform);
-
+        if (count >= 60)
+        {
+            now = clock(); 
+            count = count - 60;  
+            fprintf(stderr, "Approximate fps : %.5g.\n", 60.0 / ((now - then)/(double)CLOCKS_PER_SEC));
+            then = now;
+        }
+        count++;
         matrix = MatrixMultiply(device.world_transform, device.scale_matrix);
-        //matrix = MatrixMultiply(device.transform, &matrix);
 
+        RenderGraph(device.graph, device.world_transform);
         RenderScene(device.scene, device.program, false, device.transform, &matrix);
+        RenderLabels(device.scene, device.font, device.graph, &matrix);
+        RenderFont(device.scene, device.font, device.transform);
 
-        HandleEvents(device.window, device.panner, device.graph, device.world_transform);
+        HandleEvents(device.window, device.scene, device.panner, device.graph, device.world_transform,
+                     device.scale_matrix);
 
+        device.scene->axes_labels.count = 0;
         glfwSwapBuffers(device.window);
         glfwPollEvents();
     }

@@ -2,7 +2,8 @@
 layout (location = 0) in vec2 aPos; 
 layout (location = 1) in vec2 normal_data; 
 
-const float thickness = 3.0f;
+uniform float thickness;
+
 out vec4 g_normal; 
 
 void main() {
