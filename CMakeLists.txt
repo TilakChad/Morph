@@ -13,7 +13,8 @@ set (X11_GLFW  ${GLFW}/posix_thread.c  ${GLFW}/x11_window.c  ${GLFW}/x11_monitor
 
 include_directories(${GLFW_INCLUDE} ${GLAD_INCLUDE})
 if(WIN32)
-	add_executable(morph ${SRC}/graph.c ${SRC}/Morph.c ./glad/src/glad.c ${COMMON_GLFW} ${WIN32_GLFW} )
+	# ${SRC}/graph.c, removed from here for now
+	add_executable(morph ${SRC}/Morph.c ./glad/src/glad.c ${COMMON_GLFW} ${WIN32_GLFW} )
 	target_link_libraries(morph gdi32 kernel32 user32)
 	set (CMAKE_C_FLAGS "-std=c11")
 	add_compile_definitions(_GLFW_WIN32)

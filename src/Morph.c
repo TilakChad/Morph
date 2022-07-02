@@ -7394,6 +7394,8 @@ MVec2 ContourDirection(ImplicitFn2D fn, double x, double y, double h)
     return (MVec2){.x = -grad.y / norm, .y = grad.x / norm};
 }
 
+// Takes functions of the form f(x,y) - c to plot f(x,y) = c 
+
 void ImplicitFunctionPlot2D(MorphPlotDevice *device, ImplicitFn2D fn)
 {
     Scene         *scene                               = device->scene;
@@ -7517,10 +7519,10 @@ int main(int argc, char **argv)
 
     if (true)
     {
-        // Plot1D(device.scene, GaussianIntegral, device.graph, (MVec3){0.1f, 0.1f, 0.75f}, "Nothing");
-        // Plot1D(device.scene, Square, device.graph, (MVec3){0.4f, 0.4f, 0.1f}, "Squared");
-        // Plot1D(device.scene, lin, device.graph, (MVec3){0.9f, 0.1f, 0.1f}, "Squared");
-        PrepareScene(device.scene, device.graph);
+        Plot1D(device.scene, GaussianIntegral, device.graph, (MVec3){0.1f, 0.1f, 0.75f}, "Nothing");
+        Plot1D(device.scene, Square, device.graph, (MVec3){0.4f, 0.4f, 0.1f}, "Squared");
+        Plot1D(device.scene, lin, device.graph, (MVec3){0.9f, 0.1f, 0.1f}, "Squared");
+        
 
         clock_t  now = clock(), then = clock();
         uint32_t count = 0;

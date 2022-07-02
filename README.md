@@ -150,4 +150,16 @@ int main()
 ## Output
 <p align="left">
     <img src="./hypotrochoid.gif">
-    
+</p> 
+
+## Implicit functions 
+
+<p align = "left"> 
+    <img src = "./implicit_ellipse.png"> 
+</p> 
+
+<p align = "left"> 
+    <img src = "./smooth_lines.png"> 
+</p> 
+
+
