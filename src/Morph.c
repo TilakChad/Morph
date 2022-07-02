@@ -6327,6 +6327,14 @@ typedef enum Primitives
     TRIANGLE_STRIP = GL_TRIANGLE_STRIP
 } Primitives;
 
+typedef enum FunctionType
+{
+    LIST, 
+    PARAMETRIC_1D,
+    PARAMETRIC_2D, 
+    IMPLICIT_2D
+} FunctionType; 
+
 typedef struct GPUBatch
 {
     VertexBuffer vertex_buffer;
@@ -6343,7 +6351,9 @@ typedef struct VertexData2D
 typedef struct FunctionPlotData
 {
     bool           updated;
-    ParametricFn1D function;
+
+    FunctionType   fn_type; 
+    void*          function;
     GPUBatch      *batch;
     uint32_t       max;
     uint32_t       count;
@@ -6534,15 +6544,14 @@ void RenderScene(Scene *scene, unsigned int program, bool showPoints, Mat4 *msce
     glUniformMatrix4fv(glGetUniformLocation(program, "scene"), 1, GL_TRUE, &mscene->elem[0][0]);
     glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_TRUE, &transform->elem[0][0]);
 
-    
     for (uint32_t graph = 0; graph < scene->plots.count; ++graph)
     {
         FunctionPlotData *function = &scene->plots.functions[graph];
         glUniform3f(glGetUniformLocation(program, "inColor"), function->color.x, function->color.y, function->color.z);
         // Transfer data to the batch
-        glUniform1f(glGetUniformLocation(program,"thickness"),3.0f); 
-        if(scene->plots.current_selection == graph) 
-            glUniform1f(glGetUniformLocation(program,"thickness"),5.0f);
+        glUniform1f(glGetUniformLocation(program, "thickness"), 3.0f);
+        if (scene->plots.current_selection == graph)
+            glUniform1f(glGetUniformLocation(program, "thickness"), 6.0f);
 
         if (function->updated)
         {
@@ -6620,6 +6629,7 @@ static void Plot1D(Scene *scene, ParametricFn1D func, Graph *graph, MVec3 color,
     float             step                             = 0.1f;
 
     FunctionPlotData *function                         = &scene->plots.functions[scene->plots.count];
+    function->fn_type                                  = PARAMETRIC_1D; 
 
     VertexData2D      vec;
     vec.x                                = init;
@@ -6854,8 +6864,8 @@ void RenderFont(Scene *scene, Font *font, Mat4 *scene_transform)
 {
     glUseProgram(font->program);
     glUniformMatrix4fv(glGetUniformLocation(font->program, "scene"), 1, GL_TRUE, &scene_transform->elem[0][0]);
-    glActiveTexture(GL_TEXTURE0); 
-    glBindTexture(GL_TEXTURE_2D,font->font_texture); 
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, font->font_texture);
 
     assert(scene->axes_labels.count * 2 * 4 < scene->axes_labels.batch->vertex_buffer.max);
     memcpy(scene->axes_labels.batch->vertex_buffer.data, scene->axes_labels.data,
@@ -6871,8 +6881,8 @@ void RenderLabels(Scene *scene, Font *font, Graph *graph, Mat4 *combined_matrix)
 {
     // These should be fine recalculating per frame
 
-    scene->axes_labels.count = 0; 
-    float vec[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    scene->axes_labels.count = 0;
+    float vec[]              = {0.0f, 0.0f, 0.0f, 1.0f};
     MatrixVectorMultiply(combined_matrix, vec);
 
     MVec2 origin = (MVec2){vec[0], vec[1]};
@@ -6976,6 +6986,18 @@ void RenderLabels(Scene *scene, Font *font, Graph *graph, Mat4 *combined_matrix)
 //     scene_group->graphname[scene_group->graphcount - 1]  = GiveOnlyStaticStrings;
 // }
 
+bool InvokeAndTestFunction(void* function, FunctionType type, MVec2 vec)
+{
+    switch (type)
+    {
+        case PARAMETRIC_1D : 
+            return fabs( ((ParametricFn1D)function)(vec.x) - vec.y) < 0.04f; 
+        case IMPLICIT_2D: 
+            return fabs(((ImplicitFn2D)function)(vec.x,vec.y)) < 0.04f; 
+    }
+    return false; 
+}
+
 void HandleEvents(GLFWwindow *window, Scene *scene, State *state, Graph *graph, Mat4 *translate_matrix,
                   Mat4 *scale_matrix)
 {
@@ -7021,9 +7043,10 @@ void HandleEvents(GLFWwindow *window, Scene *scene, State *state, Graph *graph, 
         MatrixVectorMultiply(&inverse, vec);
 
         // loop through all the functions
+        scene->plots.current_selection = -1;
         for (uint32_t fn = 0; fn < scene->plots.count; ++fn)
         {
-            if (fabs(scene->plots.functions[fn].function(vec[0]) - vec[1]) < 0.05f)
+            if (InvokeAndTestFunction(scene->plots.functions[fn].function,scene->plots.functions[fn].fn_type,(MVec2){vec[0],vec[1]}))
             {
                 scene->plots.current_selection = fn;
                 break;
@@ -7334,8 +7357,145 @@ void MorphDestroyDevice(MorphPlotDevice *device)
 //     ResetRenderScene(device->render_scene);
 // }
 
+double ImplicitCircle(double x, double y)
+{
+    return x * x + y * y - 4; // Implicit circle of radius 2
+}
+
+double ImplicitEllipse(double x, double y)
+{
+    return 2 * x * x + 5 * y * y - 40; 
+}
+
+double ImplicitHyperbola(double x, double y)
+{
+    return x * x - y * y  - 1; 
+}
+
+double PartialDerivativeX(ImplicitFn2D fn, double x, double y, double h)
+{
+    return (fn(x + h, y) - fn(x, y)) / h;
+}
+
+double PartialDerivativeY(ImplicitFn2D fn, double x, double y, double h)
+{
+    return (fn(x, y + h) - fn(x, y)) / h;
+}
+
+MVec2 Gradient2D(ImplicitFn2D fn, double x, double y, double h)
+{
+    return (MVec2){PartialDerivativeX(fn, x, y, h), PartialDerivativeY(fn, x, y, h)};
+}
+
+MVec2 ContourDirection(ImplicitFn2D fn, double x, double y, double h)
+{
+    MVec2 grad = Gradient2D(fn, x, y, h);
+    float norm = sqrtf(grad.x * grad.x + grad.y * grad.y);
+    return (MVec2){.x = -grad.y / norm, .y = grad.x / norm};
+}
+
 void ImplicitFunctionPlot2D(MorphPlotDevice *device, ImplicitFn2D fn)
 {
+    Scene         *scene                               = device->scene;
+
+    const uint32_t max_verts                           = 5000;
+
+    // First determine a point in the function using any method
+    // My approach :
+    // Start at the origin and move along the partial derivatives to reach to the initial position on the surface
+
+    MVec2        vec   = {0, 0}; // start at the origin and land on the contour
+    float        hstep = 0.025f, kstep = 0.025f;
+
+    float        h            = 0.0005;
+
+    uint32_t     sample_count = 0;
+    VertexData2D vertex;
+
+
+    uint32_t     counter      = 0;
+
+    uint32_t    plots = 4;
+    int32_t     dir[] = {1, -1,1,-1}; 
+    float        origin_offsets[]    = {0.1f, 0.1f, -0.1f, -0.1f};
+
+    while (plots--)
+    {
+        // To reach the contour line, we must travel along the partial derivatives first and use Newton Raphson method
+        // to find the point of contour Taking y constant for now and moving in the direction of partial derivative
+        scene->plots.functions[scene->plots.count].max     = max_verts; // 1000 vertices for each graph at most
+        scene->plots.functions[scene->plots.count].samples = malloc(sizeof(MVec2) * max_verts);
+
+        FunctionPlotData *function                         = &scene->plots.functions[scene->plots.count];
+        function->fn_type                                  = IMPLICIT_2D;
+        function->color                                    = (MVec3){1.0f, 0.5f, 0.6f};
+        function->function                                 = fn;
+
+        vec.x                                              = origin_offsets[plots]; 
+        vec.y                                              = 0.0f; 
+
+        int32_t max_movement                               = 15000;
+        while (fabs(fn(vec.x, vec.y)) > 0.0025f)
+        {
+            // vec.y = vec.y - fn(vec.x, vec.y) / PartialDerivativeY(fn, vec.x, vec.y, hstep);
+            vec.x = vec.x - fn(vec.x, vec.y) / PartialDerivativeX(fn, vec.x, vec.y, hstep);
+        }
+
+        vertex.x                             = vec.x;
+        vertex.y                             = vec.y;
+
+        function->samples[function->count++] = vertex;
+
+        // Now move along the contour of the implicit function.
+        // Calculate partial derivative along X and Y direction.
+        // Gradient of the function
+
+        while (max_movement--)
+        {
+            // Calculate delX and delY such that they remains in the contour
+            // dy = -hstep * PartialDerivativeX(fn, vec.x, vec.y, h) / PartialDerivativeY(fn, vec.x + hstep, vec.y, h);
+
+            // If the path can't remain in the contour, then dx will be ??
+            // dx = hstep; // -hstep * PartialDerivativeY(fn, vec.x, vec.y, h) / PartialDerivativeX(fn, vec.x, vec.y +
+            // kstep, h); else
+            // {
+            //     x_inc =
+            //         -hstep * PartialDerivativeY(fn, vec.x, vec.y, h) / PartialDerivativeX(fn, vec.x, vec.y + kstep,
+            //         h);
+
+            // }
+            // Trace back to the contour after the increment
+            // Move toward that and again trace back to the contour
+            // Lets apply concept from the higher dimensional vector calculus
+
+            MVec2 tangent = ContourDirection(fn, vec.x, vec.y, h);
+            float dx      = dir[plots] * tangent.x * h * 2.5f;
+            float dy      = dir[plots] * tangent.y * h * 2.5f;
+
+            // once this is finished move toward the negative contour 
+            vec.x         = vec.x + dx;
+            vec.y         = vec.y + dy;
+
+            // while (fabs(fn(vec.x, vec.y)) > FLT_EPSILON)
+            //{
+            //     vec.y = vec.y - fn(vec.x, vec.y) / PartialDerivativeY(fn, vec.x, vec.y, hstep);
+            // }
+            if (counter++ % 100 == 0)
+            {
+                assert(function->count < function->max);
+                vertex.x                                   = vec.x;
+                vertex.y                                   = vec.y;
+                function->samples[function->count - 1].n_x = vec.x - function->samples[function->count - 1].x;
+                function->samples[function->count - 1].n_y = vec.y - function->samples[function->count - 1].y;
+                function->samples[function->count++]       = vertex;
+            }
+        }
+        function->color   = (MVec3){1.0f, 0.0f, 1.0f};
+        function->batch   = CreateNewBatch(LINE_STRIP);
+        function->updated = true;
+        scene->plots.count++;
+    }
+
 }
 
 double Square(double x)
@@ -7347,44 +7507,51 @@ double Square(double x)
 
 int main(int argc, char **argv)
 {
+
     MorphPlotDevice device = MorphCreateDevice();
     glfwShowWindow(device.window);
     glfwMakeContextCurrent(device.window);
 
-    Plot1D(device.scene, GaussianIntegral, device.graph, (MVec3){0.1f, 0.1f, 0.75f}, "Nothing");
-    Plot1D(device.scene, Square, device.graph, (MVec3){0.4f, 0.4f, 0.1f}, "Squared");
-    Plot1D(device.scene, lin, device.graph, (MVec3){0.9f, 0.1f, 0.1f}, "Squared");
-    PrepareScene(device.scene, device.graph);
+    // ImplicitFunctionPlot2D(&device, ImplicitCircle);
+    ImplicitFunctionPlot2D(&device,ImplicitEllipse); 
 
-    clock_t now = clock(), then = clock(); 
-    uint32_t count = 0; 
-
-    Mat4 matrix;
-    while (!glfwWindowShouldClose(device.window))
+    if (true)
     {
-        if (count >= 60)
+        // Plot1D(device.scene, GaussianIntegral, device.graph, (MVec3){0.1f, 0.1f, 0.75f}, "Nothing");
+        // Plot1D(device.scene, Square, device.graph, (MVec3){0.4f, 0.4f, 0.1f}, "Squared");
+        // Plot1D(device.scene, lin, device.graph, (MVec3){0.9f, 0.1f, 0.1f}, "Squared");
+        PrepareScene(device.scene, device.graph);
+
+        clock_t  now = clock(), then = clock();
+        uint32_t count = 0;
+
+        Mat4     matrix;
+        while (!glfwWindowShouldClose(device.window))
         {
-            now = clock(); 
-            count = count - 60;  
-            fprintf(stderr, "Approximate fps : %.5g.\n", 60.0 / ((now - then)/(double)CLOCKS_PER_SEC));
-            then = now;
+            if (count >= 60)
+            {
+                now   = clock();
+                count = count - 60;
+                fprintf(stderr, "Approximate fps : %.5g.\n", 60.0 / ((now - then) / (double)CLOCKS_PER_SEC));
+                then = now;
+            }
+            count++;
+            matrix = MatrixMultiply(device.world_transform, device.scale_matrix);
+
+            RenderGraph(device.graph, device.world_transform);
+            RenderScene(device.scene, device.program, false, device.transform, &matrix);
+            RenderLabels(device.scene, device.font, device.graph, &matrix);
+            RenderFont(device.scene, device.font, device.transform);
+
+            HandleEvents(device.window, device.scene, device.panner, device.graph, device.world_transform,
+                         device.scale_matrix);
+
+            device.scene->axes_labels.count = 0;
+            glfwSwapBuffers(device.window);
+            glfwPollEvents();
         }
-        count++;
-        matrix = MatrixMultiply(device.world_transform, device.scale_matrix);
 
-        RenderGraph(device.graph, device.world_transform);
-        RenderScene(device.scene, device.program, false, device.transform, &matrix);
-        RenderLabels(device.scene, device.font, device.graph, &matrix);
-        RenderFont(device.scene, device.font, device.transform);
-
-        HandleEvents(device.window, device.scene, device.panner, device.graph, device.world_transform,
-                     device.scale_matrix);
-
-        device.scene->axes_labels.count = 0;
-        glfwSwapBuffers(device.window);
-        glfwPollEvents();
+        MorphDestroyDevice(&device);
     }
-
-    MorphDestroyDevice(&device);
     return 0;
 }

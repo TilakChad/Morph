@@ -20,7 +20,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="glad\src\glad.c" />
-    <ClCompile Include="src\graph.c" />
     <ClCompile Include="src\Morph.c" />
   </ItemGroup>
   <ItemGroup>
@@ -29,6 +28,9 @@
   <ItemGroup>
     <None Include="include\text_fragment.glsl" />
     <None Include="include\text_vertex.glsl" />
+    <None Include="src\shader\aaline.fs" />
+    <None Include="src\shader\aaline.gs" />
+    <None Include="src\shader\aaline.vs" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
