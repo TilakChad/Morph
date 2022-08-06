@@ -1,3 +1,7 @@
+#define _CRT_SECURE_NO_WARNINGS
+
+#include <assert.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -14,6 +18,59 @@
  * expr :- var = stmt | stmt
  * stmt :- var | stmt * stmt | stmt + stmt | stmt - stmt | stmt / stmt
  */
+
+#if defined(__GNUC__)
+#define Unreachable() __builtin_unreachable()
+#elif defined(_MSC_VER)
+#define Unreachable() __assume(false);
+#endif
+
+#define Unimplemented() fprintf(stderr, "Function %s() not implemented : %d.", __func__, __LINE__);
+#define Assert(str)                                                                                                    \
+    {                                                                                                                  \
+        if (!(str))                                                                                                    \
+        {                                                                                                              \
+            fprintf(stderr, "Function : %s() Line : %d Assertion Failed : %s.\n", __func__, __LINE__, #str);           \
+            abort();                                                                                                   \
+        }                                                                                                              \
+    }
+
+void print_dummy(int a, ...)
+{
+    fprintf(stderr, "Can't format");
+}
+
+#define print_unknown(...) print_dummy(0, __VA_ARGS__)
+
+void unknown_print(const char *str, ...)
+{
+    fprintf(stderr,
+            "%s : "
+            "Can't format",
+            str);
+}
+// Generic print function
+#define print_generic(x) _Generic((x), int : print_int, float : print_float, default : unknown_print)(#x, x)
+
+#define GEN_PRINT(TYPE, SPECIFIER)                                                                                     \
+    void print_##TYPE(const char *str, TYPE x)                                                                         \
+    {                                                                                                                  \
+        return fprintf(stdout, "%s -> " SPECIFIER "\n", str, x);                                                       \
+    }
+
+#define NamedAssert(C, X)                                                                                              \
+    {                                                                                                                  \
+        if (!(C))                                                                                                      \
+        {                                                                                                              \
+            fprintf(stderr, "Function : %s() Line : %d Assertion : %s.\nPresent Value : ", __func__, __LINE__, #C);    \
+            print_generic(X);                                                                                          \
+            abort();                                                                                                   \
+        }                                                                                                              \
+    }
+
+GEN_PRINT(int, "%d");
+GEN_PRINT(unsigned, "%u");
+GEN_PRINT(float, "%f");
 
 #define MAX_ID_LEN 64
 
@@ -34,12 +91,6 @@ typedef enum TokenType
     TOKEN_INVALID,
     TOKEN_END
 } TokenType;
-
-struct SymbolTable
-{
-    char symbol[50];
-    // what to store as value?
-};
 
 typedef struct TokenVar
 {
@@ -71,11 +122,12 @@ typedef struct Token
 
 typedef enum
 {
-    OP_PLUS,
-    OP_MINUS,
+    OP_ADD,
+    OP_SUB,
     OP_DIV,
     OP_MUL,
     OP_EXP,
+    OP_EQUAL,
     OP_NONE
 } Op;
 
@@ -87,9 +139,9 @@ typedef enum
 
 typedef enum TermType
 {
-    FUNC, // for function definitions and calling
-    ID,   // for simple variables with values
-    VALUE
+    TERM_FUNC, // for function definitions and calling
+    TERM_ID,   // for simple variables with values
+    TERM_VALUE
 } TermType;
 
 typedef struct
@@ -101,7 +153,7 @@ typedef struct
         uint32_t value;
         char     id[MAX_ID_LEN];
         // func not declared as of now
-    }value;
+    } value;
 } Terminal;
 
 typedef struct ExprTree
@@ -109,9 +161,9 @@ typedef struct ExprTree
     NodeType node_type;
 
     union {
-        Op       operator;
+        Op       operation;
         Terminal term;
-    };
+    } data;
 
     struct ExprTree *left;
     struct ExprTree *right;
@@ -127,8 +179,35 @@ typedef struct
     } buffer;
 } Tokenizer;
 
-void EvalExprTree(ExprTree *expr)
+// EResult
+uint32_t EvalExprTree(ExprTree *expr)
 {
+    // Every numerals are uint32_t based so,
+    if (expr->node_type == LEAF)
+    {
+        if (expr->data.term.type == TERM_VALUE)
+        {
+            return expr->data.term.value.value;
+        }
+        else
+            Assert(!"Only numerals allowed for now");
+    }
+
+    // else its interior node of the tree
+
+    switch (expr->data.operation)
+    {
+    case OP_ADD:
+        return EvalExprTree(expr->left) + EvalExprTree(expr->right);
+    case OP_SUB:
+        return EvalExprTree(expr->left) - EvalExprTree(expr->right);
+    case OP_MUL:
+        return EvalExprTree(expr->left) * EvalExprTree(expr->right);
+    case OP_DIV:
+        return EvalExprTree(expr->left) / EvalExprTree(expr->right);
+    default:
+        Assert(!"Unsupported Operation ....");
+    }
 }
 
 bool IsAlpha(char ch)
@@ -150,6 +229,7 @@ bool IsWhiteSpace(char ch)
 {
     return ch == '\t' || ch == ' ' || ch == '\n';
 }
+Token TokenizeNext(Tokenizer *tokenizer);
 
 // Lets try simple parsing for now
 // Try to lookahead token without actually consuming it
@@ -190,7 +270,7 @@ Token TokenizeNext(Tokenizer *tokenizer)
             return token;
         }
 
-        switch (tokenizer->buffer.data[tokenizer->buffer.pos])
+        switch (tokenizer->buffer.data[tokenizer->buffer.pos++])
         {
         case '(':
             token.type = TOKEN_OPAREN;
@@ -221,6 +301,7 @@ Token TokenizeNext(Tokenizer *tokenizer)
             {
                 token.type         = TOKEN_ID;
                 token.token_id.len = 0;
+                tokenizer->buffer.pos--;
 
                 while ((tokenizer->buffer.pos < tokenizer->buffer.len) &&
                        IsAlphaNumeric(tokenizer->buffer.data[tokenizer->buffer.pos]))
@@ -262,11 +343,13 @@ void PrintToken(Token *token)
 
 typedef struct
 {
-    Tokenizer tokenizer;
+    Tokenizer *tokenizer;
+    Token      current_token;
     // its not going to be generic, so working for this specific case only, we have
 } Parser;
 
-void ParserStart(Parser *parser)
+Token ParseVar(Parser *parser);
+void  ParserStart(Parser *parser)
 {
     // its just passing a single line not a big deal though
     // first lets work only on parsing for now, and then use syntax directed translation to guide the search
@@ -345,47 +428,123 @@ uint32_t EvalExpr(ExprTree *tree)
 {
 }
 
-void ParseT_() // Takes the inherited attributes
+ExprTree *ParseS_(Parser *parser, ExprTree *inherited_tree);
+ExprTree *ParseS(Parser *parser);
+
+ExprTree *ParseF(Parser *parser)
 {
+    TokenType type = parser->current_token.type;
+    if (type == TOKEN_ID || type == TOKEN_NUM)
+    {
+        ExprTree *expr_tree = malloc(sizeof(*expr_tree));
+        Assert(expr_tree != NULL);
+        expr_tree->left           = NULL;
+        expr_tree->right          = NULL;
+
+        expr_tree->node_type      = LEAF;
+        expr_tree->data.term.type = type == TOKEN_NUM ? TERM_VALUE : TERM_ID;
+
+        if (type == TOKEN_NUM)
+            expr_tree->data.term.value.value = parser->current_token.token_num.value;
+        else
+            // TODO :: Update when string type is updated
+            strcpy(expr_tree->data.term.value.id,
+                   parser->current_token.token_id.name); // Len value ignored assuming c style strings
+
+        parser->current_token = TokenizeNext(parser->tokenizer);
+
+        return expr_tree;
+    }
+    if (type == TOKEN_OPAREN)
+    {
+        parser->current_token = TokenizeNext(parser->tokenizer);
+        ExprTree *tree        = ParseS(parser);
+        Assert(parser->current_token.type == TOKEN_CPAREN);
+        parser->current_token = TokenizeNext(parser->tokenizer);
+        return tree;
+    }
+    Assert(!"Invalid input detected...");
+    Unreachable();
 }
 
-void ParseT(Parser* parser)
+ExprTree *ParseT_(Parser *parser, ExprTree *inherited_tree) // Takes the inherited attributes
 {
+    TokenType type = parser->current_token.type;
+    if (type == TOKEN_MUL || type == TOKEN_DIV)
+    {
+        ExprTree *expr_tree = malloc(sizeof(*expr_tree));
+        Assert(expr_tree != NULL);
+        expr_tree->node_type      = NODE;
+        expr_tree->data.operation = type == TOKEN_MUL ? OP_MUL : OP_DIV;
+        expr_tree->left           = inherited_tree;
 
+        // Order of parsing matters here
+        parser->current_token = TokenizeNext(parser->tokenizer);
+        expr_tree->right      = ParseF(parser);
+
+        return ParseT_(parser, expr_tree);
+    }
+    return inherited_tree;
 }
 
-void ParseS_() // token_plus and token_minus takes the inherited attributes 
+ExprTree *ParseT(Parser *parser)
 {
 
-}
-
-ExprTree* ParseS(Parser *parser)
-{
-    // Starting phase of the parser
-    Token token = TokenizeNext(parser->tokenizer);
-
-    if (token.type == TOKEN_NUM || token.type == TOKEN_ID || token.type == TOKEN_OPAREN)
-    {/*
-        ExprTree *expr  = malloc(sizeof(*expr)); 
-        expr->node_type = LEAF; 
-        expr->term.type = VALUE; 
-        expr->term.value = token.token_num.value; 
-        return expr; */
-        ExprTree *termtree = ParseT(); 
+    if (parser->current_token.type == TOKEN_NUM || parser->current_token.type == TOKEN_ID ||
+        parser->current_token.type == TOKEN_OPAREN)
+    {
+        ExprTree *termtree = ParseF(parser);
+        return ParseT_(parser, termtree);
     }
     else
     {
         fprintf(stderr, "Error, unexpected token found.\n");
-        return NULL; 
+        Unimplemented();
+        return NULL;
     }
 }
 
-void ParseF()
+ExprTree *ParseS_(Parser *parser, ExprTree *inherited_tree) // token_plus and token_minus takes the inherited attributes
 {
+    TokenType type = parser->current_token.type;
+    if (type == TOKEN_PLUS || type == TOKEN_MINUS)
+    {
+        // Allocate a new tree with node
+        ExprTree *expr_tree = malloc(sizeof(*expr_tree));
+        Assert(expr_tree != NULL);
+        expr_tree->node_type      = NODE;
+        expr_tree->data.operation = type == TOKEN_PLUS ? OP_ADD : OP_SUB;
+        expr_tree->left           = inherited_tree;
+
+        // Order of parsing matters here
+        parser->current_token = TokenizeNext(parser->tokenizer);
+        expr_tree->right      = ParseT(parser);
+
+        return ParseS_(parser, expr_tree);
+    }
+    return inherited_tree;
 }
 
-uint32_t CreateExprTree(Parser *parser)
+ExprTree *ParseS(Parser *parser)
 {
+    if (parser->current_token.type == TOKEN_NUM || parser->current_token.type == TOKEN_ID ||
+        parser->current_token.type == TOKEN_OPAREN)
+    {
+        ExprTree *termtree = ParseT(parser);
+        return ParseS_(parser, termtree);
+    }
+    else
+    {
+        fprintf(stderr, "Error, unexpected token found.\n");
+        Unimplemented();
+        return NULL;
+    }
+}
+
+ExprTree *CreateExprTree(Parser *parser)
+{
+    parser->current_token = TokenizeNext(parser->tokenizer);
+    return ParseS(parser);
 }
 
 bool ParseVarBody(Parser *parser, SymbolTable *symbol_table, Symbol *symbol)
@@ -417,17 +576,23 @@ Token ParseVar(Parser *parser)
     {
         // its a variable, add it to the symbol entry
         Symbol symbol;
-        symbol.id = token.token_id.name; // ignore length for now
-        TokenizeNext(tokenizer);         // skip the lookahead
-        ParserVarBody(parser, &symbol);
+        strcpy(symbol.id, token.token_id.name); // ignore length for now
+        TokenizeNext(tokenizer);                // skip the lookahead
+        // ParserVarBody(parser, &symbol);
     }
 }
 
 int main(int argc, char **argv)
 {
-    const char *string    = "func(x,y)";
-    Tokenizer  *tokenizer = CreateTokenizer(string, 6);
-    Token       tok       = TokenizeNext(tokenizer);
-    PrintToken(&tok);
+    const char *string = "1 + 2 * (3 * 4 + 44 / 4 * 2) / 4 ";
+    // const char *string    = "44 / 4 * 2";
+    Tokenizer *tokenizer = CreateTokenizer(string, strlen(string));
+    // Token       tok       = TokenizeNext(tokenizer);
+    // PrintToken(&tok);
+    Parser parser;
+    parser.tokenizer = tokenizer;
+    ExprTree *expr   = CreateExprTree(&parser);
+    fprintf(stderr, "Output : %u.", EvalExprTree(expr));
+
     return 0;
 }
