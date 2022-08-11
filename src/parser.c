@@ -71,6 +71,7 @@ void unknown_print(const char *str, ...)
 GEN_PRINT(int, "%d");
 GEN_PRINT(unsigned, "%u");
 GEN_PRINT(float, "%f");
+GEN_PRINT(char, "%c");
 
 #define MAX_ID_LEN 64
 
@@ -194,6 +195,7 @@ uint32_t EvalExprTree(ExprTree *expr)
     }
 
     // else its interior node of the tree
+    // TODO :: Replace it in a data driven way
 
     switch (expr->data.operation)
     {
@@ -272,6 +274,9 @@ Token TokenizeNext(Tokenizer *tokenizer)
 
         switch (tokenizer->buffer.data[tokenizer->buffer.pos++])
         {
+        case '=': 
+            token.type = TOKEN_EQUAL; 
+            break; 
         case '(':
             token.type = TOKEN_OPAREN;
             break;
@@ -319,6 +324,7 @@ Token TokenizeNext(Tokenizer *tokenizer)
 Tokenizer *CreateTokenizer(uint8_t *buffer, uint32_t len)
 {
     Tokenizer *tokenizer = malloc(sizeof(*tokenizer));
+    Assert(tokenizer != NULL);
     memset(tokenizer, 0, sizeof(*tokenizer));
 
     // should it be deep copied or shallow copy?
@@ -347,86 +353,6 @@ typedef struct
     Token      current_token;
     // its not going to be generic, so working for this specific case only, we have
 } Parser;
-
-Token ParseVar(Parser *parser);
-void  ParserStart(Parser *parser)
-{
-    // its just passing a single line not a big deal though
-    // first lets work only on parsing for now, and then use syntax directed translation to guide the search
-
-    Token next_token = TokenizerLookahead(&parser->tokenizer);
-    // f(x) = x
-
-    switch (next_token.type)
-    {
-    case TOKEN_NONE:
-        return;
-    case TOKEN_ID:
-    {
-        // Not enough information from here
-        // Parse it as a variable now
-        ParseVar(&parser->tokenizer);
-    }
-    break;
-    }
-}
-
-typedef struct ComputationContext
-{
-    uint32_t nothing;
-} ComputationContext;
-
-typedef struct Symbol
-{
-    // It can be either variable or function
-    char     id_len;
-    char     id[MAX_ID_LEN];
-    uint32_t value;
-} Symbol;
-
-typedef struct SymbolFn
-{
-    uint32_t  type; // implicit 1D, 2D or HD
-    uint32_t  args_count;
-    char      id[MAX_ID_LEN];
-    Symbol   *args;
-    ExprTree *expr_tree;
-} SymbolFn;
-
-typedef struct SymbolTable
-{
-    uint32_t  var_count;
-    uint32_t  var_max;
-    uint32_t  fn_count;
-    uint32_t  fn_max;
-
-    Symbol   *variables;
-    SymbolFn *functions;
-} SymbolTable;
-
-SymbolTable symbol_table;
-
-void        InitSymbolTable(SymbolTable *symbol_table)
-{
-    memset(symbol_table, 0, sizeof(*symbol_table));
-    symbol_table->var_max   = 10;
-    symbol_table->fn_max    = 10;
-
-    symbol_table->variables = malloc(sizeof(*symbol_table->variables) * symbol_table->var_max);
-    symbol_table->functions = malloc(sizeof(*symbol_table->functions) * symbol_table->fn_max);
-}
-
-void InsertSymbolVar(SymbolTable *table, Symbol *symbol)
-{
-}
-
-void InsertSymbolFn(SymbolTable *table, SymbolFn *fn)
-{
-}
-
-uint32_t EvalExpr(ExprTree *tree)
-{
-}
 
 ExprTree *ParseS_(Parser *parser, ExprTree *inherited_tree);
 ExprTree *ParseS(Parser *parser);
@@ -541,13 +467,118 @@ ExprTree *ParseS(Parser *parser)
     }
 }
 
+// Parse the section pointed by parser and create the resulting expression tree which needs to be further evaluated for
+// the result
 ExprTree *CreateExprTree(Parser *parser)
 {
     parser->current_token = TokenizeNext(parser->tokenizer);
     return ParseS(parser);
 }
 
-bool ParseVarBody(Parser *parser, SymbolTable *symbol_table, Symbol *symbol)
+void DestroyExprTree(ExprTree *expr_tree)
+{
+    if (!expr_tree)
+        return;
+    DestroyExprTree(expr_tree->left);
+    DestroyExprTree(expr_tree->right);
+    free(expr_tree);
+}
+
+// Implementation for interactive graph plotting
+
+typedef struct ComputationContext // probably dependency graph
+{
+    uint32_t nothing;
+} ComputationContext;
+
+typedef enum
+{
+    VAR_ID,
+    VAR_VALUE
+} SymbolVarType;
+
+typedef struct SymbolVar
+{
+    SymbolVarType var_type;
+    struct
+    {
+        char     id_len;
+        char     id[MAX_ID_LEN];
+        uint32_t value;
+    } data; // named just for convenience
+} SymbolVar;
+
+typedef struct SymbolFn
+{
+    uint32_t   type; // implicit 1D, 2D or HD
+    char       id[MAX_ID_LEN];
+    uint32_t   args_count;
+    SymbolVar *args;
+    ExprTree  *expr_tree;
+} SymbolFn;
+
+// TODO :: Use hash map for symbol table
+typedef struct SymbolTable
+{
+    uint32_t   var_count;
+    uint32_t   var_max;
+    uint32_t   fn_count;
+    uint32_t   fn_max;
+
+    SymbolVar *variables;
+    SymbolFn **functions;
+} SymbolTable;
+
+SymbolTable symbol_table;
+
+void        InitSymbolTable(SymbolTable *symbol_table)
+{
+    NamedAssert(symbol_table != NULL, symbol_table);
+    memset(symbol_table, 0, sizeof(*symbol_table));
+    symbol_table->var_max   = 10;
+    symbol_table->fn_max    = 10;
+
+    symbol_table->variables = malloc(sizeof(*symbol_table->variables) * symbol_table->var_max);
+    symbol_table->functions = malloc(sizeof(*symbol_table->functions) * symbol_table->fn_max);
+}
+
+bool InsertSymbolVar(SymbolTable *table, SymbolVar *symbol)
+{
+    NamedAssert(table->var_count < table->var_max, table->var_count);
+    if (table->var_count < table->var_max)
+        return false;
+    table->variables[table->var_count++] = *symbol;
+    return true;
+}
+
+bool InsertSymbolFn(SymbolTable *table, SymbolFn *fn)
+{
+    // Its quite a complicated case
+    NamedAssert(table->fn_count < table->fn_max, table->fn_count);
+    if (table->var_count < table->var_max)
+        return false;
+
+    table->functions[table->fn_count++] = fn;
+    return true;
+}
+
+// (LResult, bool)
+uint32_t FindSymbolTableEntry(SymbolTable *symbol_table, const char *id)
+{
+    // Only look into the entries of var for now
+    for (uint32_t var = 0; var < symbol_table->var_count; ++var)
+    {
+        if (!strcmp(id, symbol_table->variables->data.id))
+        {
+            return symbol_table->variables->data.value;
+        }
+    }
+
+    Assert("Symbol not found in the scope");
+    return 0;
+}
+
+bool ParseVarBody(Parser *parser, SymbolTable *symbol_table, SymbolVar *symbol)
 {
     // should it be calculated right here?
     // use this symbol table to calculate the current value of the variable.
@@ -556,43 +587,144 @@ bool ParseVarBody(Parser *parser, SymbolTable *symbol_table, Symbol *symbol)
     return false;
 }
 
+uint32_t EvalExprTreeWithSymbolTable(ExprTree *expr, SymbolTable *symbol_table)
+{
+    // Every numerals are uint32_t based so,
+    if (expr->node_type == LEAF)
+    {
+        if (expr->data.term.type == TERM_VALUE)
+        {
+            return expr->data.term.value.value;
+        }
+        else
+        {
+            // look for the current identifier in the symbol table
+
+            Assert(!"Only numerals allowed for now");
+        }
+    }
+
+    // else its interior node of the tree
+    // TODO :: Replace it in a data driven way
+
+    switch (expr->data.operation)
+    {
+    case OP_ADD:
+        return EvalExprTree(expr->left) + EvalExprTree(expr->right);
+    case OP_SUB:
+        return EvalExprTree(expr->left) - EvalExprTree(expr->right);
+    case OP_MUL:
+        return EvalExprTree(expr->left) * EvalExprTree(expr->right);
+    case OP_DIV:
+        return EvalExprTree(expr->left) / EvalExprTree(expr->right);
+    default:
+        Assert(!"Unsupported Operation ....");
+    }
+}
+
+bool ParseVar(Parser *parser);
+
+// It might need to take current symbol table to calculate its value at the moment
+
+void ParseStart(Parser *parser)
+{
+    // its just passing a single line not a big deal though
+    // first lets work only on parsing for now, and then use syntax directed translation to guide the parser
+    Token next_token      = TokenizerLookahead(parser->tokenizer);
+    // f(x) = x
+
+    switch (next_token.type)
+    {
+    case TOKEN_NONE:
+        return;
+    case TOKEN_ID:
+    {
+        // Not enough information from here
+        // Parse it as a variable now
+        Assert(ParseVar(&parser->tokenizer));
+    }
+    break;
+    }
+}
+
 bool ParseFuncBody(Parser *parser, SymbolFn *fn)
 {
     return false;
 }
 
-Token ParseVar(Parser *parser)
+bool ParseVar(Parser *parser)
 {
-    Tokenizer *tokenizer = parser->tokenizer;
-    Token      token     = TokenizeNext(tokenizer);
-    Token      next      = TokenizerLookahead(tokenizer);
+    Token token = TokenizeNext(parser->tokenizer);
+    Token next  = TokenizerLookahead(parser->tokenizer);
 
     if (next.type == TOKEN_OPAREN)
     {
         // start of the function parsing phase
         // parse function here recursively
+        // start of the function declaration phase
+
+        // Simply loop through the tokens skipping commas and add to function declaration
+
+        SymbolFn *fn = malloc(sizeof(*fn));
+        strcpy(fn->id, token.token_id.name);
+
+        Assert(fn != NULL); 
+        memset(fn, 0, sizeof(*fn));
+
+        TokenizeNext(parser->tokenizer);
+        token = TokenizeNext(parser->tokenizer);
+
+        while (token.type != TOKEN_CPAREN)
+        {
+            // Its just a token id
+            NamedAssert(token.type == TOKEN_ID, token.type);
+            // The args only contains the variable
+            fn->args[fn->args_count].var_type = VAR_ID;
+            strcpy(fn->args[fn->args_count].data.id,token.token_id.name);
+
+            parser->current_token = TokenizeNext(parser->tokenizer);
+            fn->args_count = fn->args_count + 1;
+        }
+        InsertSymbolFn(&symbol_table, fn);
+        return true;
     }
     else if (next.type == TOKEN_EQUAL)
     {
         // its a variable, add it to the symbol entry
-        Symbol symbol;
-        strcpy(symbol.id, token.token_id.name); // ignore length for now
-        TokenizeNext(tokenizer);                // skip the lookahead
+        SymbolVar var;
+        strcpy(var.data.id, token.token_id.name); // ignore length for now
+
+        TokenizeNext(parser->tokenizer); 
+
+        ExprTree *expr_tree = CreateExprTree(parser);
+        var.var_type        = VAR_VALUE;
+        var.data.value      = EvalExprTree(expr_tree);
+        DestroyExprTree(expr_tree);
+        // parser->current_token = TokenizeNext(parser->tokenizer);    // skip the lookahead
         // ParserVarBody(parser, &symbol);
+        return true;
     }
+    return false;
 }
 
 int main(int argc, char **argv)
 {
-    const char *string = "1 + 2 * (3 * 4 + 44 / 4 * 2) / 4 ";
-    // const char *string    = "44 / 4 * 2";
-    Tokenizer *tokenizer = CreateTokenizer(string, strlen(string));
+    // const char *string = "1 + 2 * (3 * 4 + 44 / 4 * 2) / 4 - 3 ";
+    const char *string    = "2 * 2";
+    Tokenizer  *tokenizer = CreateTokenizer(string, strlen(string));
     // Token       tok       = TokenizeNext(tokenizer);
     // PrintToken(&tok);
     Parser parser;
     parser.tokenizer = tokenizer;
-    ExprTree *expr   = CreateExprTree(&parser);
-    fprintf(stderr, "Output : %u.", EvalExprTree(expr));
+    ExprTree *expr1  = CreateExprTree(&parser);
+    fprintf(stderr, "Output : %u.", EvalExprTree(expr1));
+
+    // Symbol table is currently global
+    InitSymbolTable(&symbol_table);
+    const char *expr          = "a = 4";
+    Tokenizer  *new_tokenizer = CreateTokenizer(expr, strlen(expr));
+    Parser      parser2       = {.tokenizer = new_tokenizer};
+    ParseStart(&parser2);
 
     return 0;
 }
