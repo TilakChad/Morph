@@ -10,6 +10,8 @@
 
 // A Tokenizer for the expression that could be drawn in the plotter
 
+// Working on function application
+
 /*
  * We want to parse expressions like :
  * f(x) = x * x
@@ -25,7 +27,11 @@
 #define Unreachable() __assume(false);
 #endif
 
-#define Unimplemented() fprintf(stderr, "Function %s() not implemented : %d.", __func__, __LINE__);
+#define Unimplemented()                                                                                                \
+    {                                                                                                                  \
+        fprintf(stderr, "Function %s() not implemented : %d.", __func__, __LINE__);                                    \
+        abort();                                                                                                       \
+    }
 #define Assert(str)                                                                                                    \
     {                                                                                                                  \
         if (!(str))                                                                                                    \
@@ -136,6 +142,7 @@ typedef enum
     OP_MUL,
     OP_EXP,
     OP_EQUAL,
+    OP_FUNC_APPLY,
     OP_NONE
 } Op;
 
@@ -152,6 +159,32 @@ typedef enum TermType
     TERM_VALUE
 } TermType;
 
+typedef enum
+{
+    VAR_ID,
+    VAR_VALUE
+} SymbolVarType;
+
+typedef struct SymbolVar
+{
+    SymbolVarType var_type;
+    struct
+    {
+        char     id_len;
+        char     id[MAX_ID_LEN];
+        uint32_t value;
+    } data; // named just for convenience
+} SymbolVar;
+
+typedef struct SymbolFn SymbolFn;
+
+typedef struct
+{
+    uint32_t  args_used; // count of arguments used in calling the functions
+    SymbolVar args[10];  // arguments passed to the function
+    SymbolFn *fn;        // Reference to actual function being invoked
+} FuncData;
+
 typedef struct
 {
     // could be num or variable or function invocation too
@@ -161,6 +194,7 @@ typedef struct
         uint32_t value;
         char     id[MAX_ID_LEN];
         // func not declared as of now
+        FuncData func_data;
     } value;
 } Terminal;
 
@@ -219,6 +253,8 @@ uint32_t EvalExprTree(ExprTree *expr)
         return EvalExprTree(expr->left) * EvalExprTree(expr->right);
     case OP_DIV:
         return EvalExprTree(expr->left) / EvalExprTree(expr->right);
+    case OP_FUNC_APPLY:
+        Unimplemented();
     default:
         Assert(!"Unsupported Operation ....");
     }
@@ -376,23 +412,6 @@ typedef struct ComputationContext // probably dependency graph
     uint32_t nothing;
 } ComputationContext;
 
-typedef enum
-{
-    VAR_ID,
-    VAR_VALUE
-} SymbolVarType;
-
-typedef struct SymbolVar
-{
-    SymbolVarType var_type;
-    struct
-    {
-        char     id_len;
-        char     id[MAX_ID_LEN];
-        uint32_t value;
-    } data; // named just for convenience
-} SymbolVar;
-
 typedef struct SymbolFn
 {
     uint32_t  type; // implicit 1D, 2D or HD
@@ -431,6 +450,7 @@ SymbolTableStack symbol_table_stack;
 // Using LL(1) grammar, with left recursion elimination
 SymbolTable *CheckVarInScope(SymbolTableStack *stable_stack, const char *id);
 SymbolVar   *FindSymbolTableEntryVar(SymbolTable *symbol_table, const char *id);
+SymbolFn    *FindSymbolTableEntryFn(SymbolTable *symbol_table, const char *id);
 
 typedef struct
 {
@@ -465,18 +485,87 @@ ExprTree *ParseF(Parser *parser)
         {
             // If the variable is in the enclosing scope and assigned, then evaluate it.
             // But if its in a enclosing scope that explicitly says to not evaluate, then don't
-            SymbolTable *table = CheckVarInScope(&symbol_table_stack, parser->current_token.token_id.name);
-            Assert(table != NULL);
-            if (!table->should_evaluate)
+            // its function either evaluate it or create a new expr tree
+            Token lookahead = TokenizerLookahead(parser->tokenizer);
+            // if it result a opening paren
+            if (lookahead.type == TOKEN_OPAREN)
             {
-                strcpy(expr_tree->data.term.value.id, parser->current_token.token_id.name);
+                // Either try to a function application fully and return a leaf node with single data
+                // Or pass it to the evaluator to continue the process
+                // To allow sensible global variables, I guess it should be evaluated right here
+                // I guess actual calculation should be deferred.
+                // But its hard to represent function both way.
+
+                SymbolFn *fn =
+                    FindSymbolTableEntryFn(symbol_table_stack.symbol_tables[0], parser->current_token.token_id.name);
+                Assert(fn != NULL);
+
+                // At the evaluation process, function can only be evaluated. Not defined.
+                Assert(TokenizeNext(parser->tokenizer).type == TOKEN_OPAREN);
+                FuncData fn_data = {0};
+                fn_data.fn       = fn;
+
+                for (uint32_t arg = 0; arg < fn->args_count; ++arg)
+                {
+                    Token token = TokenizeNext(parser->tokenizer);
+
+                    if (token.type == TOKEN_NUM)
+                    {
+                        fn_data.args[fn_data.args_used] =
+                            (SymbolVar){.var_type = VAR_VALUE, .data.value = token.token_num.value};
+                    }
+                    else if (token.type == TOKEN_ID)
+                    {
+                        // Look up in the current scope, if its value is to be evaluated use it right here, right now
+                        SymbolTable *table = CheckVarInScope(&symbol_table_stack, token.token_id.name);
+                        // if (!table)
+                        //{
+                        //     fn_data.args[fn_data.args_used].var_type = VAR_ID;
+                        //     strcpy(fn_data.args[fn_data.args_used].data.id, token.token_id.name);
+                        // }
+                        Assert(table != NULL);
+                        if (table->should_evaluate)
+                        {
+                            SymbolVar *var = FindSymbolTableEntryVar(table, token.token_id.name);
+                            fn_data.args[fn_data.args_used] =
+                                (SymbolVar){.var_type = VAR_VALUE, .data.value = var->data.value};
+                        }
+                        else
+                        {
+                            fn_data.args[fn_data.args_used].var_type = VAR_ID;
+                            strcpy(fn_data.args[fn_data.args_used].data.id, token.token_id.name);
+                        }
+                    }
+                    else
+                        Assert(!"Invalid Token");
+                    parser->current_token = TokenizeNext(parser->tokenizer);
+                    Assert(parser->current_token.type == TOKEN_COMMA || parser->current_token.type == TOKEN_CPAREN);
+
+                    fn_data.args_used = fn_data.args_used + 1;
+                }
+
+                Assert(parser->current_token.type == TOKEN_CPAREN);
+                // parser->current_token = TokenizeNext(parser->tokenizer);
+                expr_tree->node_type                 = NODE;
+                expr_tree->data.operation            = OP_FUNC_APPLY;
+                expr_tree->data.term.value.func_data = fn_data;
             }
             else
             {
-                SymbolVar *var = FindSymbolTableEntryVar(table, parser->current_token.token_id.name);
-                NamedAssert(var != NULL, parser->current_token.token_id.name);
-                expr_tree->data.term.type        = TERM_VALUE;
-                expr_tree->data.term.value.value = var->data.value;
+                // Its a usual variable
+                SymbolTable *table = CheckVarInScope(&symbol_table_stack, parser->current_token.token_id.name);
+                Assert(table != NULL);
+                if (!table->should_evaluate)
+                {
+                    strcpy(expr_tree->data.term.value.id, parser->current_token.token_id.name);
+                }
+                else
+                {
+                    SymbolVar *var = FindSymbolTableEntryVar(table, parser->current_token.token_id.name);
+                    NamedAssert(var != NULL, parser->current_token.token_id.name);
+                    expr_tree->data.term.type        = TERM_VALUE;
+                    expr_tree->data.term.value.value = var->data.value;
+                }
             }
         }
         parser->current_token = TokenizeNext(parser->tokenizer);
@@ -705,8 +794,17 @@ SymbolVar *FindSymbolTableEntryVar(SymbolTable *symbol_table, const char *id)
             return symbol_table->variables + var;
         }
     }
+    // Assert("Symbol not in scope");
+    return NULL;
+}
 
-    Assert("Symbol not in scope");
+SymbolFn *FindSymbolTableEntryFn(SymbolTable *symbol_table, const char *id)
+{
+    for (uint32_t fn = 0; fn < symbol_table->fn_count; ++fn)
+    {
+        if (!strcmp(id, symbol_table->functions[fn]->id, id))
+            return symbol_table->functions[fn];
+    }
     return NULL;
 }
 
@@ -719,7 +817,38 @@ bool ParseVarBody(Parser *parser, SymbolTable *symbol_table, SymbolVar *symbol)
     return false;
 }
 
-uint32_t EvalExprTreeWithSymbolTable(SymbolTable *symbol_table, ExprTree *expr)
+uint32_t FunctionApplication(SymbolTableStack *stable_stack, FuncData *fn_data)
+{
+    SymbolTable *table = CreateSymbolTable(true);
+
+    Assert(fn_data->args_used == fn_data->fn->args_count);
+
+    for (uint32_t arg = 0; arg < fn_data->fn->args_count; ++arg)
+    {
+        table->variables[arg].var_type = VAR_ID;
+        if (fn_data->args[arg].var_type == VAR_VALUE)
+        {
+            strcpy(table->variables[arg].data.id, fn_data->fn->args[arg].data.id);
+            table->variables[arg].data.value = fn_data->args[arg].data.value;
+        }
+        else
+        {
+            // Unimplemented();
+            // Take information from the closed scoped upper layer
+            SymbolTable *table = CheckVarInScope(stable_stack, fn_data->fn->args[arg].data.id);
+            Assert(table != NULL);
+            SymbolVar *var = FindSymbolTableEntryVar(table, fn_data->fn->args[arg].data.id);
+            table->variables[arg].data.value = var->data.value;
+        }
+        table->var_count++;
+    }
+    PushToSymbolTableStack(stable_stack, table);
+    uint32_t val = EvalExprTreeWithSymbolTableStack(stable_stack, fn_data->fn->expr_tree);
+    free(PopFromSymbolTableStack(stable_stack));
+    return val;
+}
+
+uint32_t EvalExprTreeWithSymbolTableStack(SymbolTableStack *stable_stack, ExprTree *expr)
 {
     // Every numerals are uint32_t based so,
     if (expr->node_type == LEAF)
@@ -736,8 +865,17 @@ uint32_t EvalExprTreeWithSymbolTable(SymbolTable *symbol_table, ExprTree *expr)
             // Proceeding assuming its a plain variable for now
             if (expr->data.term.type == TERM_ID)
             {
-                // It could even be a function invocation
-                SymbolVar *var = FindSymbolTableEntryVar(symbol_table, expr->data.term.value.id);
+                // Functions given higher priority
+                // TODO :: Resolve it a bit later
+                SymbolTable *table = CheckVarInScope(stable_stack, expr->data.term.value.id);
+                Assert(table != NULL);
+                // SymbolFn *fn = FindSymbolTableEntryFn(symbol_table, expr->data.term.value.id);
+                // if (fn != NULL)
+                //{
+                //     return 0;
+                // }
+                //  It could even be a function invocation
+                SymbolVar *var = FindSymbolTableEntryVar(table, expr->data.term.value.id);
                 NamedAssert(var != NULL, expr->data.term.value.id);
                 return var->data.value;
             }
@@ -752,17 +890,20 @@ uint32_t EvalExprTreeWithSymbolTable(SymbolTable *symbol_table, ExprTree *expr)
     switch (expr->data.operation)
     {
     case OP_ADD:
-        return EvalExprTreeWithSymbolTable(symbol_table, expr->left) +
-               EvalExprTreeWithSymbolTable(symbol_table, expr->right);
+        return EvalExprTreeWithSymbolTableStack(stable_stack, expr->left) +
+               EvalExprTreeWithSymbolTableStack(stable_stack, expr->right);
     case OP_SUB:
-        return EvalExprTreeWithSymbolTable(symbol_table, expr->left) -
-               EvalExprTreeWithSymbolTable(symbol_table, expr->right);
+        return EvalExprTreeWithSymbolTableStack(stable_stack, expr->left) -
+               EvalExprTreeWithSymbolTableStack(stable_stack, expr->right);
     case OP_MUL:
-        return EvalExprTreeWithSymbolTable(symbol_table, expr->left) *
-               EvalExprTreeWithSymbolTable(symbol_table, expr->right);
+        return EvalExprTreeWithSymbolTableStack(stable_stack, expr->left) *
+               EvalExprTreeWithSymbolTableStack(stable_stack, expr->right);
     case OP_DIV:
-        return EvalExprTreeWithSymbolTable(symbol_table, expr->left) /
-               EvalExprTreeWithSymbolTable(symbol_table, expr->right);
+        return EvalExprTreeWithSymbolTableStack(stable_stack, expr->left) /
+               EvalExprTreeWithSymbolTableStack(stable_stack, expr->right);
+    case OP_FUNC_APPLY:
+        return FunctionApplication(stable_stack, &expr->data.term.value.func_data);
+
     default:
         Assert(!"Unsupported Operation ....");
     }
@@ -888,17 +1029,17 @@ bool ParseVar(Parser *parser)
 
         TokenizeNext(parser->tokenizer);
 
-        SymbolTable *top       = TopOfSymbolTableStack(&symbol_table_stack);
+        // SymbolTable *top       = TopOfSymbolTableStack(&symbol_table_stack);
 
-        ExprTree    *expr_tree = CreateExprTree(parser);
-        var.var_type           = VAR_VALUE;
+        ExprTree *expr_tree = CreateExprTree(parser);
+        var.var_type        = VAR_VALUE;
         // I guess, stack doesn't need to be provided here
-        var.data.value = EvalExprTreeWithSymbolTable(top, expr_tree);
+        var.data.value = EvalExprTreeWithSymbolTableStack(&symbol_table_stack, expr_tree);
         // var.data.value = EvalExprTree(expr_tree);
         DestroyExprTree(expr_tree);
         // parser->current_token = TokenizeNext(parser->tokenizer);    // skip the lookahead
         // ParserVarBody(parser, &symbol);
-        InsertSymbolVar(top, &var);
+        InsertSymbolVar(TopOfSymbolTableStack(&symbol_table_stack), &var);
         return true;
     }
     return false;
@@ -959,33 +1100,35 @@ void RunInterpreter(Parser *parser)
     }
 }
 
-void EvalAndPrintFunctions(SymbolFn *fn)
+void EvalAndPrintFunctions(SymbolTableStack *stable_stack, SymbolFn *fn)
 {
     SymbolTable *table = CreateSymbolTable(true);
     // Populate this symbol table with the arguments of functions
     for (uint32_t arg = 0; arg < fn->args_count; ++arg)
     {
-        table->variables[table->var_count] = fn->args[arg];
-        table->variables[table->var_count].var_type = TERM_VALUE; 
-        table->var_count                   = table->var_count + 1;
+        table->variables[table->var_count]          = fn->args[arg];
+        table->variables[table->var_count].var_type = TERM_VALUE;
+        table->var_count                            = table->var_count + 1;
     }
-    // find x 
-    SymbolVar *var_x = FindSymbolTableEntryVar(table,"x"); 
-    Assert(var_x != NULL); 
-    SymbolVar *var_y = FindSymbolTableEntryVar(table, "y"); 
-    Assert(var_y != NULL); 
 
+    // find x
+    SymbolVar *var_x = FindSymbolTableEntryVar(table, "x");
+    Assert(var_x != NULL);
+    SymbolVar *var_y = FindSymbolTableEntryVar(table, "y");
+    Assert(var_y != NULL);
+
+    PushToSymbolTableStack(stable_stack, table);
     for (uint32_t x = 0; x < 10; ++x)
     {
-        var_x->data.value = x; 
+        var_x->data.value = x;
         for (uint32_t y = 0; y < 10; ++y)
         {
-            var_y->data.value = y; 
-            fprintf(stdout, "(%2u,%2u) -> %2u |",x,y, EvalExprTreeWithSymbolTable(table,fn->expr_tree));
+            var_y->data.value = y;
+            fprintf(stdout, "(%2u,%2u) -> %2u |", x, y, EvalExprTreeWithSymbolTableStack(stable_stack, fn->expr_tree));
         }
         fprintf(stdout, "\n");
     }
-    free(table); 
+    free(PopFromSymbolTableStack(stable_stack));
 }
 
 int main(int argc, char **argv)
@@ -1015,8 +1158,12 @@ int main(int argc, char **argv)
     // ParseStart(&parser2);
     // PrintSymbolTable(&symbol_table);
 
-    const char *expr    = "a = 4 \n b = 5 \n c = a + 2 * b \n cd = a * a + b * b \n e(x,y) = x * y";
-    Parser      nparser = {.tokenizer = CreateTokenizer(expr, strlen(expr))};
+    const char *expr =
+        "a = 4 \n b = 5 \n c = a + 2 * b \n cd = a * a + b * b \n f(x,y) = x * x + y * y \n h(x,y) = f(x,3)";
+
+    // const char *expr    = "a = 4 \n cd = 4 \n g(x,y) = x + y";
+    // const char *expr    = "cd = 34 \n g(x,y) = y + x \n f(x,y) = x * y \n a = f(3,2) + g(3,2)";
+    Parser nparser = {.tokenizer = CreateTokenizer(expr, strlen(expr))};
     RunInterpreter(&nparser);
 
     SymbolTable *scope = CheckVarInScope(&symbol_table_stack, "cd");
@@ -1025,8 +1172,13 @@ int main(int argc, char **argv)
     // We know have functions, now we need a way to evaluate it
     PrintSymbolTable(symbol_table_stack.symbol_tables[0]);
 
-    fprintf(stdout, "Showing function implementation test \n"); 
+    fprintf(stdout, "Showing function implementation test \n");
+
     for (uint32_t fn = 0; fn < symbol_table_stack.symbol_tables[0]->fn_count; ++fn)
-        EvalAndPrintFunctions(symbol_table_stack.symbol_tables[0]->functions[fn]); 
+    {
+        fprintf(stdout, "\n%u function\n\n", fn);
+        EvalAndPrintFunctions(&symbol_table_stack, symbol_table_stack.symbol_tables[0]->functions[fn]);
+    }
+
     return 0;
 }
