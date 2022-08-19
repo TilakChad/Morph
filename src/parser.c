@@ -1,6 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <assert.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -8,10 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "./parser.h"
+
 // A Tokenizer for the expression that could be drawn in the plotter
 
 // Working on function application
-
+// TODO :: Work on prebuilt functions : exp(), log(), sin(), cos(), tan(), pow() and sqrt() all taking single arguments
 /*
  * We want to parse expressions like :
  * f(x) = x * x
@@ -170,9 +173,9 @@ typedef struct SymbolVar
     SymbolVarType var_type;
     struct
     {
-        char     id_len;
-        char     id[MAX_ID_LEN];
-        uint32_t value;
+        char  id_len;
+        char  id[MAX_ID_LEN];
+        float value;
     } data; // named just for convenience
 } SymbolVar;
 
@@ -180,6 +183,8 @@ typedef struct SymbolFn SymbolFn;
 
 typedef struct
 {
+    bool      is_builtin;
+    uint32_t  builtin_index;
     uint32_t  args_used; // count of arguments used in calling the functions
     SymbolVar args[10];  // arguments passed to the function
     SymbolFn *fn;        // Reference to actual function being invoked
@@ -191,8 +196,8 @@ typedef struct
     // handle all these cases
     TermType type;
     union {
-        uint32_t value;
-        char     id[MAX_ID_LEN];
+        float value;
+        char  id[MAX_ID_LEN];
         // func not declared as of now
         FuncData func_data;
     } value;
@@ -221,8 +226,32 @@ typedef struct
     } buffer;
 } Tokenizer;
 
+typedef double (*fn_ptr)(double f);
+typedef struct BuiltinFunctions
+{
+    struct
+    {
+        const char *name;
+        fn_ptr      fn;
+    } functions[10];
+} BuiltinFunctions;
+
+BuiltinFunctions builtins;
+
+void             InitBuiltinFunctions()
+{
+    memset(builtins.functions, 0, sizeof(builtins.functions));
+
+    const char *fn_name[] = {"sin", "cos", "tan", "pow", "exp", "sqrt", "log"};
+    fn_ptr      fn_ptrs[] = {sin, cos, tan, pow, exp, sqrt, log};
+    for (uint32_t fn = 0; fn < sizeof(fn_ptrs) / sizeof(*fn_ptrs); ++fn)
+    {
+        builtins.functions[fn].name = fn_name[fn];
+        builtins.functions[fn].fn   = fn_ptrs[fn];
+    }
+}
 // EResult
-uint32_t EvalExprTree(ExprTree *expr)
+float EvalExprTree(ExprTree *expr)
 {
     // Every numerals are uint32_t based so,
     if (expr->node_type == LEAF)
@@ -407,11 +436,6 @@ void PrintToken(Token *token)
 
 // Implementation for interactive graph plotting
 
-typedef struct ComputationContext // probably dependency graph
-{
-    uint32_t nothing;
-} ComputationContext;
-
 typedef struct SymbolFn
 {
     uint32_t  type; // implicit 1D, 2D or HD
@@ -452,7 +476,7 @@ SymbolTable *CheckVarInScope(SymbolTableStack *stable_stack, const char *id);
 SymbolVar   *FindSymbolTableEntryVar(SymbolTable *symbol_table, const char *id);
 SymbolFn    *FindSymbolTableEntryFn(SymbolTable *symbol_table, const char *id);
 
-typedef struct
+typedef struct Parser
 {
     Tokenizer *tokenizer;
     Token      current_token;
@@ -496,16 +520,35 @@ ExprTree *ParseF(Parser *parser)
                 // I guess actual calculation should be deferred.
                 // But its hard to represent function both way.
 
-                SymbolFn *fn =
-                    FindSymbolTableEntryFn(symbol_table_stack.symbol_tables[0], parser->current_token.token_id.name);
-                Assert(fn != NULL);
+                FuncData fn_data    = {0};
+                uint32_t args_count = 0;
+                // First check if the function is builtin
+                for (uint32_t built = 0; built < 7; ++built)
+                {
+                    if (!strcmp(builtins.functions[built].name, parser->current_token.token_id.name))
+                    {
+                        // Builtin function detected
+                        fn_data.is_builtin    = true;
+                        fn_data.builtin_index = built;
+                        break;
+                    }
+                }
 
-                // At the evaluation process, function can only be evaluated. Not defined.
+                if (fn_data.is_builtin)
+                    args_count = 1; // Restricted
+                else
+                {
+
+                    SymbolFn *fn = FindSymbolTableEntryFn(symbol_table_stack.symbol_tables[0],
+                                                          parser->current_token.token_id.name);
+                    Assert(fn != NULL);
+                    // At the evaluation process, function can only be evaluated. Not defined.
+                    fn_data.fn = fn;
+                    args_count = fn->args_count;
+                }
                 Assert(TokenizeNext(parser->tokenizer).type == TOKEN_OPAREN);
-                FuncData fn_data = {0};
-                fn_data.fn       = fn;
 
-                for (uint32_t arg = 0; arg < fn->args_count; ++arg)
+                for (uint32_t arg = 0; arg < args_count; ++arg)
                 {
                     Token token = TokenizeNext(parser->tokenizer);
 
@@ -817,13 +860,14 @@ bool ParseVarBody(Parser *parser, SymbolTable *symbol_table, SymbolVar *symbol)
     return false;
 }
 
-uint32_t FunctionApplication(SymbolTableStack *stable_stack, FuncData *fn_data)
+float FunctionApplication(SymbolTableStack *stable_stack, FuncData *fn_data)
 {
+    // If it is builtin, argument could be applied directly
     SymbolTable *table = CreateSymbolTable(true);
 
-    Assert(fn_data->args_used == fn_data->fn->args_count);
+    // Assert(fn_data->args_used == fn_data->fn->args_count);
 
-    for (uint32_t arg = 0; arg < fn_data->fn->args_count; ++arg)
+    for (uint32_t arg = 0; arg < fn_data->args_used; ++arg)
     {
         table->variables[arg].var_type = VAR_ID;
         if (fn_data->args[arg].var_type == VAR_VALUE)
@@ -835,20 +879,27 @@ uint32_t FunctionApplication(SymbolTableStack *stable_stack, FuncData *fn_data)
         {
             // Unimplemented();
             // Take information from the closed scoped upper layer
-            SymbolTable *table = CheckVarInScope(stable_stack, fn_data->fn->args[arg].data.id);
-            Assert(table != NULL);
-            SymbolVar *var = FindSymbolTableEntryVar(table, fn_data->fn->args[arg].data.id);
+            SymbolTable *ttable = CheckVarInScope(stable_stack, fn_data->args[arg].data.id);
+            Assert(ttable != NULL);
+            SymbolVar *var                   = FindSymbolTableEntryVar(ttable, fn_data->args[arg].data.id);
             table->variables[arg].data.value = var->data.value;
         }
         table->var_count++;
     }
     PushToSymbolTableStack(stable_stack, table);
-    uint32_t val = EvalExprTreeWithSymbolTableStack(stable_stack, fn_data->fn->expr_tree);
+    float val = 0;
+    if (fn_data->is_builtin)
+    {
+        val = table->variables[0].data.value;
+        val = builtins.functions[fn_data->builtin_index].fn(val);
+    }
+    else
+        val = EvalExprTreeWithSymbolTableStack(stable_stack, fn_data->fn->expr_tree);
     free(PopFromSymbolTableStack(stable_stack));
     return val;
 }
 
-uint32_t EvalExprTreeWithSymbolTableStack(SymbolTableStack *stable_stack, ExprTree *expr)
+float EvalExprTreeWithSymbolTableStack(SymbolTableStack *stable_stack, ExprTree *expr)
 {
     // Every numerals are uint32_t based so,
     if (expr->node_type == LEAF)
@@ -968,6 +1019,12 @@ bool ParseFuncBody(Parser *parser, SymbolTable *symbol_table, SymbolFn *fn)
     // And thats normally expected behavior too
     // Need to think of another alternative approach
     // Infuse information directly in the symbol table
+}
+
+SymbolFn *GetLatestParsedFn()
+{
+    Assert(symbol_table_stack.symbol_tables[0]->fn_count != 0);
+    return symbol_table_stack.symbol_tables[0]->functions[symbol_table_stack.symbol_tables[0]->fn_count - 1]; 
 }
 
 bool ParseVar(Parser *parser)
@@ -1100,6 +1157,59 @@ void RunInterpreter(Parser *parser)
     }
 }
 
+ComputationContext *NewComputation(SymbolFn *fn)
+{
+    ComputationContext *context = malloc(sizeof(*context));
+    Assert(context != NULL); // Just for keeping msvc happy
+    context->fn        = fn;
+
+    SymbolTable *table = CreateSymbolTable(true);
+    // Populate this symbol table with the arguments of functions
+    for (uint32_t arg = 0; arg < fn->args_count; ++arg)
+    {
+        table->variables[table->var_count]          = fn->args[arg];
+        table->variables[table->var_count].var_type = TERM_VALUE;
+        table->var_count                            = table->var_count + 1;
+    }
+
+    context->table = table;
+    return context;
+}
+
+// float EvalFromContext(ComputationContext* context, uint32_t var_count,  ...)
+float EvalFromContext(ComputationContext *context, float x, float y)
+{
+    Assert(context != NULL);
+    // Change first argument regardless of the name
+    context->table->variables[0].data.value = x;
+    context->table->variables[0].var_type   = VAR_VALUE;
+
+    context->table->variables[1].data.value = y;
+    context->table->variables[1].var_type   = VAR_VALUE;
+
+    PushToSymbolTableStack(&symbol_table_stack, context->table);
+
+    float val = EvalExprTreeWithSymbolTableStack(&symbol_table_stack, context->fn->expr_tree);
+
+    PopFromSymbolTableStack(&symbol_table_stack);
+    return val;
+}
+
+float Eval1DFunction(SymbolFn *fn, float x)
+{
+    SymbolTable *top_table           = TopOfSymbolTableStack(&symbol_table_stack);
+    top_table->variables[0].var_type = TERM_VALUE;
+    PushToSymbolTableStack(&symbol_table_stack, top_table);
+    PopFromSymbolTableStack(&symbol_table_stack);
+    /*return EvalExprTreeWithSymbolTableStack(&symbol_table_stack,)*/
+}
+
+void DestroyComputationContext(ComputationContext *context)
+{
+    free(context->table);
+    free(context);
+}
+
 void EvalAndPrintFunctions(SymbolTableStack *stable_stack, SymbolFn *fn)
 {
     SymbolTable *table = CreateSymbolTable(true);
@@ -1124,16 +1234,39 @@ void EvalAndPrintFunctions(SymbolTableStack *stable_stack, SymbolFn *fn)
         for (uint32_t y = 0; y < 10; ++y)
         {
             var_y->data.value = y;
-            fprintf(stdout, "(%2u,%2u) -> %2u |", x, y, EvalExprTreeWithSymbolTableStack(stable_stack, fn->expr_tree));
+            fprintf(stdout, "(%2u,%2u) -> %3.2f |", x, y,
+                    EvalExprTreeWithSymbolTableStack(stable_stack, fn->expr_tree));
         }
         fprintf(stdout, "\n");
     }
     free(PopFromSymbolTableStack(stable_stack));
 }
 
-int main(int argc, char **argv)
+Parser *CreateParser(const char *str, uint32_t len) // string that remains valid
+{
+    Parser *parser = malloc(sizeof(*parser));
+    Assert(parser != NULL);
+    *parser = (Parser){.tokenizer = CreateTokenizer((uint8_t *)str, len), .current_token = TOKEN_NONE};
+    return parser;
+}
+
+void UpdateParserData(Parser *parser, const char *str, uint32_t len)
+{
+    parser->tokenizer->buffer.data = str;
+    parser->tokenizer->buffer.pos  = 0;
+    parser->tokenizer->buffer.len  = len; 
+}
+
+void InitInterpreter()
+{
+    InitSymbolTableStack(&symbol_table_stack); 
+    InitBuiltinFunctions(); 
+}
+
+int smain(int argc, char **argv)
 {
     InitSymbolTableStack(&symbol_table_stack);
+    InitBuiltinFunctions();
     // const char *string = "1 + 2 * (3 * 4 + 44 / 4 * 2) / 4 - 3 ";
     // const char *string    = "2 * 2";
     // Tokenizer  *tokenizer = CreateTokenizer(string, strlen(string));
@@ -1158,13 +1291,13 @@ int main(int argc, char **argv)
     // ParseStart(&parser2);
     // PrintSymbolTable(&symbol_table);
 
-    const char *expr =
-        "a = 4 \n b = 5 \n c = a + 2 * b \n cd = a * a + b * b \n f(x,y) = x * x + y * y \n h(x,y) = f(x,3)";
+    const char *expr = "a = 4 \n b = 5 \n c = a + 2 * b \n cd = a * a + b * b \n f(x,y) = x * x + y  \n h(x,y) = "
+                       "sin(x) * sin(x) + cos(x) * cos(x) ";
 
     // const char *expr    = "a = 4 \n cd = 4 \n g(x,y) = x + y";
     // const char *expr    = "cd = 34 \n g(x,y) = y + x \n f(x,y) = x * y \n a = f(3,2) + g(3,2)";
-    Parser nparser = {.tokenizer = CreateTokenizer(expr, strlen(expr))};
-    RunInterpreter(&nparser);
+    Parser *nparser = CreateParser(expr, strlen(expr));
+    RunInterpreter(nparser);
 
     SymbolTable *scope = CheckVarInScope(&symbol_table_stack, "cd");
     Assert(scope != NULL);
@@ -1174,11 +1307,18 @@ int main(int argc, char **argv)
 
     fprintf(stdout, "Showing function implementation test \n");
 
-    for (uint32_t fn = 0; fn < symbol_table_stack.symbol_tables[0]->fn_count; ++fn)
+    for (uint32_t fn = 0; fn < symbol_table_stack.symbol_tables[0]->fn_count - 1; ++fn)
     {
         fprintf(stdout, "\n%u function\n\n", fn);
         EvalAndPrintFunctions(&symbol_table_stack, symbol_table_stack.symbol_tables[0]->functions[fn]);
     }
+
+    ComputationContext *context = NewComputation(symbol_table_stack.symbol_tables[0]->functions[0]);
+    for (float x = -5; x <= 5; x++)
+    {
+        fprintf(stdout, "%3.3f : %3.3f.\n", x, EvalFromContext(context, x, x));
+    }
+    DestroyComputationContext(context);
 
     return 0;
 }
