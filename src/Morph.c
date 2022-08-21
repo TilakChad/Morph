@@ -297,17 +297,16 @@ static void KeyCallback(GLFWwindow *window, int key, int scancode, int action, i
 
         SymbolFn           *fn      = GetLatestParsedFn();
         ComputationContext *context = NewComputation(fn);
-       
-        float               rands[3]; 
-        for (uint32_t i = 0; i < 3; ++i)
-            rands[i] = (rand() % 100) / 100.0f; 
-        
-        Plot1DFromComputationContext(data->scene, context, data->graph, *(MVec3 *)(rands),
-                                     "Plotted from context");
 
+        float               rands[3];
+        for (uint32_t i = 0; i < 3; ++i)
+            rands[i] = (rand() % 100) / 100.0f;
+
+        Plot1DFromComputationContext(data->scene, context, data->graph, *(MVec3 *)(rands), "Plotted from context");
         DestroyComputationContext(context);
     }
     PanelKeyCallback(data->panel, key, scancode, action, mod);
+    // TODO :: Update the orthographic projection for that seamless transition and update the scissor window
 }
 
 static void CharCallback(GLFWwindow *window, unsigned int codepoint)
@@ -345,6 +344,24 @@ float MagicNumberGenerator(int n)
     return non_neg ? (n * n + 1) * val : (n * n + 1) / val;
 }
 
+struct ScaleTransition
+{
+    bool  should_animate;
+    float g_init, g_term;
+
+    float s_init, s_term;
+    float sc_init, sc_term;
+    float start;
+    float duration_constant;
+
+    bool  offset_changed;
+    float offset;
+} scroll_animation;
+
+void AnimateScrolling(Graph *graph, Mat4 *scale_transform)
+{
+}
+
 void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
 {
     const float origin = 200.0f;
@@ -353,18 +370,21 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
     UserData   *data   = glfwGetWindowUserPointer(window);
     Graph      *graph  = data->graph;
 
+    // TODO :: There's some scaling imperfection while zooming in for grids. Maybe look at it later.
+
+    scroll_animation.g_init = graph->slide_scale.x / graph->scale.x;
+
     // capture mouse co-ordinates here
     double xPos, yPos;
     glfwGetCursorPos(window, &xPos, &yPos);
+
     // shift the origin somewhere far from here
-    const int scale_factor = 100;
+    scroll_animation.s_init = graph->slide_scale.x;
 
-    double    scaledFactor = 0.0f;
-
-    float     prev_scale_x = graph->slide_scale.x;
     graph->slide_scale.y += scale * yoffset;
     graph->slide_scale.x += scale * yoffset;
-    scaledFactor = graph->slide_scale.x / prev_scale_x;
+    // adjust the scaling of the graph
+
     // Dynamic scaling looks kinda hard
     static int absScale = 0;
 
@@ -383,6 +403,7 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
             changeY = true;
     }
 
+    // Enters the transition phase
     if (changeX || changeY)
     {
         if (changeX)
@@ -398,11 +419,15 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
         graph->slide_scale = (MVec2){origin, origin};
     }
 
-    // adjust the scaling of the graph
+    // Mat4 *scale_transform           = data->scale_transform;
+    // s                               = graph->slide_scale.x / graph->scale.x;
+    //*scale_transform                = ScalarMatrix(s, s, 1.0f);
 
-    Mat4 *scale_transform = data->scale_transform;
-    s                     = graph->slide_scale.x / graph->scale.x;
-    *scale_transform      = ScalarMatrix(s, s, 1.0f);
+    scroll_animation.should_animate = true;
+    scroll_animation.start          = glfwGetTime();
+    scroll_animation.g_term         = graph->slide_scale.x / graph->scale.x;
+    scroll_animation.sc_term        = graph->scale.x;
+    scroll_animation.s_term         = graph->slide_scale.x;
 }
 
 unsigned int LoadProgram(Shader vertex, Shader fragment)
@@ -614,7 +639,7 @@ struct State
 GPUBatch *CreateNewBatch(Primitives primitive)
 {
     GPUBatch *batch          = malloc(sizeof(*batch));
-    batch->vertex_buffer.max = 25000;
+    batch->vertex_buffer.max = 35000;
     batch->primitive         = primitive;
 
     glGenVertexArrays(1, &batch->vao);
@@ -622,7 +647,7 @@ GPUBatch *CreateNewBatch(Primitives primitive)
     glBindBuffer(GL_ARRAY_BUFFER, batch->vertex_buffer.vbo);
     glBufferData(GL_ARRAY_BUFFER, batch->vertex_buffer.max * sizeof(*batch->vertex_buffer.data), NULL, GL_STATIC_DRAW);
 
-    batch->vertex_buffer.max   = 25000;
+    batch->vertex_buffer.max   = 35000;
     batch->vertex_buffer.count = 0;
     batch->vertex_buffer.dirty = true;
     batch->vertex_buffer.data  = malloc(sizeof(uint8_t) * batch->vertex_buffer.max);
@@ -703,7 +728,7 @@ void InitGraph(Graph *graph)
     graph->slide_scale = (MVec2){200.0f, 200.0f};
 }
 
-void RenderGraph(Graph *graph, Mat4 *transform)
+void RenderGraph(Graph *graph, Mat4 *transform, float X, float Y)
 {
     glUseProgram(graph->program);
     glBindVertexArray(graph->vao);
@@ -711,7 +736,7 @@ void RenderGraph(Graph *graph, Mat4 *transform)
     float center[4] = {graph->center.x, graph->center.y, 0.0f, 1.0f};
     MatrixVectorMultiply(transform, center);
     glUniform2f(glGetUniformLocation(graph->program, "center"), center[0], center[1]);
-    glUniform2f(glGetUniformLocation(graph->program, "scale"), graph->slide_scale.x, graph->slide_scale.y);
+    glUniform2f(glGetUniformLocation(graph->program, "scale"), X, Y);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glUseProgram(0);
     glBindVertexArray(0);
@@ -742,7 +767,7 @@ void Init2DScene(Scene *scene)
     }
 
     scene->axes_labels.count   = 0;
-    scene->axes_labels.max     = 100000;
+    scene->axes_labels.max     = 500000;
     scene->axes_labels.batch   = CreateNewBatch(TRIANGLES);
     scene->axes_labels.updated = true;
     scene->axes_labels.data    = malloc(sizeof(*scene->axes_labels.data) * scene->axes_labels.max);
@@ -941,7 +966,7 @@ void LoadFont(Font *font, const char *font_dir)
     stbtt_InitFont(&sfont, fontbuffer.data, 0);
 
     // Load the character's data from stb_truetype
-    float fontSize = 30;
+    float fontSize = 25;
     float scale    = stbtt_ScaleForPixelHeight(&sfont, fontSize);
     int   ascent, descent, baseline;
     stbtt_GetFontVMetrics(&sfont, &ascent, &descent, 0);
@@ -1287,6 +1312,39 @@ void HandleEvents(GLFWwindow *window, Scene *scene, State *state, Graph *graph, 
             }
         }
     }
+
+    if (scroll_animation.should_animate)
+    {
+        float t = (glfwGetTime() - scroll_animation.start) / scroll_animation.duration_constant;
+        if (t >= 1.0f)
+        {
+            t                               = 1.0f;
+            scroll_animation.should_animate = false;
+        }
+        float s              = scroll_animation.g_init + t * (scroll_animation.g_term - scroll_animation.g_init);
+        graph->slide_scale.x = scroll_animation.s_init + t * (scroll_animation.s_term - scroll_animation.s_init);
+        *scale_matrix        = ScalarMatrix(s, s, 1.0f);
+        graph->slide_scale.y = graph->slide_scale.x;
+    }
+
+    // Viewport shifting
+    if (panel->render.Anim.should_run)
+    {
+        float now            = glfwGetTime(); // time in seconds
+        panel->render.Anim.t = (now - panel->render.Anim.last_time) / panel->render.Anim.time_constant;
+
+        if (panel->render.Anim.t >= 1.0f)
+            panel->render.Anim.t = 1.0f;
+
+        float offset = (1.0f - panel->render.Anim.t) * panel->dimension.x;
+
+        if (!panel->render.Anim.hidden)
+            offset = panel->render.Anim.t * panel->dimension.x;
+
+        scroll_animation.offset_changed = true;
+        scroll_animation.offset         = offset;
+        // Update the ortho projection matrix and restore to its previous position later on
+    }
 }
 
 // Functions related to API
@@ -1443,6 +1501,9 @@ MorphPlotDevice MorphCreateDevice()
     device.should_close = false;
 
     InitInterpreter();
+    scroll_animation.duration_constant = 0.05f;
+    scroll_animation.offset_changed    = true;
+    scroll_animation.offset            = 0.0f;
     return device;
 }
 //
@@ -1753,60 +1814,39 @@ double Square(double x)
     return x * x;
 }
 
-//#include <time.h>
+void Draw(MorphPlotDevice *device, Mat4 *translate, Mat4* scale, bool show_points)
+{
+    // When offset changes the point of origin also shifts at certain distance away 
+    float Y               = device->graph->slide_scale.x; 
 
-// Now onto UI stuffs
+    Mat4 outer_transform = MatrixMultiply(translate, scale);
+    *device->transform =
+        OrthographicProjection(0, screen_width - scroll_animation.offset, 0, screen_height, -1.0f, 1.0f);
+    glViewport(scroll_animation.offset, 0, screen_width - scroll_animation.offset, screen_height);
+    
+    Mat4 translater = TranslationMatrix(scroll_animation.offset, 0.0f,0.0f); 
 
-// int main(int argc, char **argv)
-//{
-//
-//     MorphPlotDevice device = MorphCreateDevice();
-//     glfwShowWindow(device.window);
-//     glfwMakeContextCurrent(device.window);
-//
-//     // ImplicitFunctionPlot2D(&device, ImplicitCircle);
-//     ImplicitFunctionPlot2D(&device,ImplicitEllipse);
-//
-//     if (true)
-//     {
-//         Plot1D(device.scene, GaussianIntegral, device.graph, (MVec3){0.1f, 0.1f, 0.75f}, "Nothing");
-//         Plot1D(device.scene, Square, device.graph, (MVec3){0.4f, 0.4f, 0.1f}, "Squared");
-//         Plot1D(device.scene, lin, device.graph, (MVec3){0.9f, 0.1f, 0.1f}, "Squared");
-//
-//
-//         clock_t  now = clock(), then = clock();
-//         uint32_t count = 0;
-//
-//         Mat4     matrix;
-//         while (!glfwWindowShouldClose(device.window))
-//         {
-//             if (count >= 60)
-//             {
-//                 now   = clock();
-//                 count = count - 60;
-//                 fprintf(stderr, "Approximate fps : %.5g.\n", 60.0 / ((now - then) / (double)CLOCKS_PER_SEC));
-//                 then = now;
-//             }
-//             count++;
-//             matrix = MatrixMultiply(device.world_transform, device.scale_matrix);
-//
-//             RenderGraph(device.graph, device.world_transform);
-//             RenderScene(device.scene, device.program, false, device.transform, &matrix);
-//             RenderLabels(device.scene, device.font, device.graph, &matrix);
-//             RenderFont(device.scene, device.font, device.transform);
-//
-//             HandleEvents(device.window, device.scene, device.panner, device.graph, device.world_transform,
-//                          device.scale_matrix);
-//
-//             device.scene->axes_labels.count = 0;
-//             glfwSwapBuffers(device.window);
-//             glfwPollEvents();
-//         }
-//
-//         MorphDestroyDevice(&device);
-//     }
-//     return 0;
-// }
+    Mat4 graph_transform = MatrixMultiply(translate, &translater); 
+    graph_transform = MatrixMultiply(&graph_transform, scale); 
+
+    float X = device->graph->slide_scale.x * ( 1.0f - scroll_animation.offset/screen_width); 
+    float f = 1.0f - scroll_animation.offset/screen_width; 
+
+    device->graph->slide_scale.x = X; 
+    device->graph->slide_scale.y = X; 
+
+    Mat4 nscalar                 = ScalarMatrix(scale->elem[0][0] * f, scale->elem[1][1] * f, 1.0f);
+    Mat4 ntransform              = MatrixMultiply(translate, &nscalar); 
+
+    RenderGraph(device->graph, &graph_transform, X, X);
+    RenderScene(device->scene, device->program, false, device->transform, &ntransform);
+    
+    RenderLabels(device->scene, device->font, device->graph, &outer_transform);
+    RenderFont(device->scene, device->font, device->transform);
+    
+    device->graph->slide_scale.x = Y; 
+    device->graph->slide_scale.y = Y; 
+}
 
 void MorphPlot(MorphPlotDevice *device)
 {
@@ -1822,23 +1862,25 @@ void MorphPlot(MorphPlotDevice *device)
     {
         matrix = MatrixMultiply(device->world_transform, device->scale_matrix);
 
-        RenderGraph(device->graph, device->world_transform);
-        RenderScene(device->scene, device->program, false, device->transform, &matrix);
-        RenderLabels(device->scene, device->font, device->graph, &matrix);
-        RenderFont(device->scene, device->font, device->transform);
-
-        HandleEvents(device->window, device->scene, device->panner, device->graph, device->world_transform,
-                     device->scale_matrix, device->panel);
+        // RenderGraph(device->graph, device->world_transform);
+        // RenderScene(device->scene, device->program, false, device->transform, &matrix);
+        // RenderLabels(device->scene, device->font, device->graph, &matrix);
+        // RenderFont(device->scene, device->font, device->transform);
+        Draw(device, device->world_transform,device->scale_matrix, false);
 
         glUseProgram(program);
+        identity = MatrixMultiply(device->transform, &device->panel->render.local_transform);
         glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_TRUE,
                            (const GLfloat *)&identity.elem[0][0]);
-        identity = MatrixMultiply(device->transform, &device->panel->render.local_transform);
+
+        glViewport(0, 0, screen_width, screen_height);
         RenderPanel(device->panel, device->panel->render.font, device->transform);
 
         device->panel->render.font_batch->vertex_buffer.count = 0;
         device->scene->axes_labels.count                      = 0;
 
+        HandleEvents(device->window, device->scene, device->panner, device->graph, device->world_transform,
+                     device->scale_matrix, device->panel);
         glfwSwapBuffers(device->window);
         glfwPollEvents();
     }

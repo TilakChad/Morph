@@ -57,7 +57,7 @@ Panel          *CreatePanel(uint32_t scr_w, uint32_t scr_h)
     assert(panel != NULL);
     memset(panel, 0, sizeof(*panel));
 
-    panel->dimension            = (Pos2D){350, scr_h};
+    panel->dimension            = (Pos2D){250, scr_h};
     panel->origin               = (Pos2D){0, scr_h};
 
     panel->panel.history_count  = 1;
@@ -85,7 +85,8 @@ Panel          *CreatePanel(uint32_t scr_w, uint32_t scr_h)
     panel->render.CaretAnim.t                        = 0;
     *(float *)&panel->render.CaretAnim.time_constant = 0.05f; // casting away the constness
 
-    panel->render.local_transform                    = IdentityMatrix();
+    panel->render.local_transform                    = TranslationMatrix(-panel->dimension.x,0.0f,0.0f);
+    panel->render.Anim.hidden                        = true;
     return panel;
 }
 
@@ -169,9 +170,9 @@ static void UpdatePanel(Panel *panel)
 
             // In case of folding, panel->render.Anim.t should run backward
 
-            float offset = (panel->render.Anim.t - 1) * panel->dimension.x;
-            
-            if (panel->render.Anim.fold)
+            float offset = -panel->dimension.x + panel->dimension.x * panel->render.Anim.t;               
+
+            if (panel->render.Anim.hidden)
                 offset = panel->render.Anim.t * -panel->dimension.x;
 
             panel->render.local_transform = TranslationMatrix(offset, 0.0f, 0.0f);
@@ -280,8 +281,8 @@ static void RenderText(GPUBatch *batch, uint32_t font_program, Mat4 *transform, 
 void        RenderPanel(Panel *panel, Font *font, Mat4 *ortho)
 {
     // Enable scissor
-    glEnable(GL_SCISSOR_TEST);
-    glScissor(0, 0, panel->dimension.x, panel->dimension.y);
+    // glEnable(GL_SCISSOR_TEST);
+    // glScissor(0, 0, panel->dimension.x, panel->dimension.y);
     // Fill the text and starts rendering
     TextPanel *active_panel = &panel->panel.history[panel->panel.active_panel];
 
@@ -334,7 +335,7 @@ void        RenderPanel(Panel *panel, Font *font, Mat4 *ortho)
     PrepareFontBatch(panel->render.font_batch);
     RenderText(panel->render.font_batch, panel->render.font->program, ortho, panel, panel->render.font->font_texture);
 
-    glDisable(GL_SCISSOR_TEST);
+    // glDisable(GL_SCISSOR_TEST);
 }
 
 static void RenderText(GPUBatch *batch, uint32_t font_program, Mat4 *transform, Panel *panel, uint32_t font_texture)
@@ -407,7 +408,7 @@ void PanelFrameChangeCallback(Panel *panel, int width, int height)
     screen_width  = width;
     screen_height = height;
     glViewport(0, 0, width, height);
-    panel->dimension.x    = 0.30 * width;
+    panel->dimension.x    = 0.20 * width;
     panel->dimension.y    = height;
     panel->origin.y       = height;
     panel->origin.x       = 0;
@@ -483,7 +484,7 @@ void PanelKeyCallback(Panel *panel, int key, int scancode, int action, int mods)
 
     if (key == GLFW_KEY_TAB && action == GLFW_PRESS)
     {
-        panel->render.Anim.fold       = !panel->render.Anim.fold;
+        panel->render.Anim.hidden       = !panel->render.Anim.hidden;
         panel->render.Anim.should_run = true;
         panel->render.Anim.last_time  = glfwGetTime();
         panel->render.Anim.t          = 0.0f;

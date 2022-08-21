@@ -105,7 +105,7 @@ typedef struct
     struct
     {
         bool        should_run;
-        bool        fold; 
+        bool        hidden; 
         float       last_time;
         const float time_constant;
         float       t; // use linear interpolation

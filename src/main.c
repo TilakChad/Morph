@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#include <math.h>
 #include "./Morph.h"
 
 double ImplicitCircle(double x, double y);
@@ -11,17 +12,21 @@ double inv(double x);
 double lin(double x);
 double Square(double x);
 
-void   MorphPlot(MorphPlotDevice *device);
-void   Plot1D(Scene *scene, ParametricFn1D func, Graph *graph, MVec3 color, const char *legend);
+double ImplicitHeart(double x, double y)
+{
+    return x * x + pow(y - pow(x * x, 1.0f / 3), 2.0f) - 1; 
+}
 
-int    main(int argc, char **argv)
+void MorphPlot(MorphPlotDevice *device);
+void Plot1D(Scene *scene, ParametricFn1D func, Graph *graph, MVec3 color, const char *legend);
+int  main(int argc, char **argv)
 {
     MorphPlotDevice device = MorphCreateDevice();
     glfwShowWindow(device.window);
     glfwMakeContextCurrent(device.window);
 
     // ImplicitFunctionPlot2D(&device, ImplicitCircle);
-    ImplicitFunctionPlot2D(&device, ImplicitEllipse);
+    ImplicitFunctionPlot2D(&device, ImplicitHeart);
 
     if (true)
     {
