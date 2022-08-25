@@ -31,6 +31,13 @@
 
 // TODO Later : Add terminal and a parser
 
+#if defined(__GNUC__)
+#define Unreachable() __builtin_unreachable()
+#elif defined(_MSC_VER)
+#define Unreachable() __assume(false);
+#endif
+
+
 #define TriggerBreakpoint()                                                                                            \
     {                                                                                                                  \
         printf("Abort called at func -> %s, line ->  %d.", __func__, __LINE__);                                        \
@@ -257,7 +264,7 @@ const char *ShaderTypeName(ShaderType shader)
     case GEOMETRY_SHADER:
         return "Geometry Shader";
     default:
-        __assume(false);
+        Unreachable();
     }
 }
 void ErrorCallback(int code, const char *description)
@@ -523,11 +530,11 @@ Shader LoadShader(const char *shader_path, ShaderType type)
     case GEOMETRY_SHADER:
         shader_define = GL_GEOMETRY_SHADER;
     default:
-        __assume(false);
+        Unreachable();
     }
     shader.shader = glCreateShader(shader_define);
     shader.type   = type;
-    glShaderSource(shader.shader, 1, &str.data, NULL);
+    glShaderSource(shader.shader, 1, (const char* const *)&str.data, NULL);
     glCompileShader(shader.shader);
     int compiled;
     glGetShaderiv(shader.shader, GL_COMPILE_STATUS, &compiled);
@@ -948,9 +955,6 @@ void PlotParametric(Scene *scene, parametricfn func, Graph *graph)
         AddSingleVertex(scene_group, vec);
     }*/
 }
-
-void HandleEvents(GLFWwindow *window, State *state, Graph *graph, Mat4 *world_transform, Mat4 *scale_matrix,
-                  Panel *panel);
 
 void LoadFont(Font *font, const char *font_dir)
 {
