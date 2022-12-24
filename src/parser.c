@@ -70,7 +70,7 @@ void print_str(const char *name, const char *str)
 #define GEN_PRINT(TYPE, SPECIFIER)                                                                                     \
     void print_##TYPE(const char *str, TYPE x)                                                                         \
     {                                                                                                                  \
-        return fprintf(stdout, "%s -> " SPECIFIER "\n", str, x);                                                       \
+        fprintf(stdout, "%s -> " SPECIFIER "\n", str, x);                                                              \
     }
 
 #define NamedAssert(C, X)                                                                                              \
@@ -242,8 +242,8 @@ void             InitBuiltinFunctions()
 {
     memset(builtins.functions, 0, sizeof(builtins.functions));
 
-    const char *fn_name[] = {"sin", "cos", "tan", "pow", "exp", "sqrt", "log"};
-    fn_ptr      fn_ptrs[] = {sin, cos, tan, pow, exp, sqrt, log};
+    const char *fn_name[] = {"sin", "cos", "tan", "exp", "sqrt", "log"};
+    fn_ptr      fn_ptrs[] = {sin, cos, tan, exp, sqrt, log};
     for (uint32_t fn = 0; fn < sizeof(fn_ptrs) / sizeof(*fn_ptrs); ++fn)
     {
         builtins.functions[fn].name = fn_name[fn];
@@ -845,7 +845,7 @@ SymbolFn *FindSymbolTableEntryFn(SymbolTable *symbol_table, const char *id)
 {
     for (uint32_t fn = 0; fn < symbol_table->fn_count; ++fn)
     {
-        if (!strcmp(id, symbol_table->functions[fn]->id, id))
+        if (!strcmp(id, symbol_table->functions[fn]->id))
             return symbol_table->functions[fn];
     }
     return NULL;
@@ -859,6 +859,9 @@ bool ParseVarBody(Parser *parser, SymbolTable *symbol_table, SymbolVar *symbol)
 
     return false;
 }
+
+float EvalExprTreeWithSymbolTableStack(SymbolTableStack *stable_stack, ExprTree *expr);
+
 
 float FunctionApplication(SymbolTableStack *stable_stack, FuncData *fn_data)
 {
@@ -979,7 +982,7 @@ void ParseStart(Parser *parser)
     {
         // Not enough information from here
         // Parse it as a variable now
-        Assert(ParseVar(&parser->tokenizer));
+        Assert(ParseVar(parser));
     }
     break;
     }
@@ -1111,7 +1114,7 @@ void PrintSymbolTable(SymbolTable *symbol_table)
     for (uint32_t var = 0; var < symbol_table->var_count; ++var)
     {
         SymbolVar *entry = &symbol_table->variables[var];
-        fprintf(stdout, "Var   : %-20s \nValue : %-20u\n", entry->data.id, entry->data.value);
+        fprintf(stdout, "Var   : %-20s \nValue : %-20.5g\n", entry->data.id, entry->data.value);
     }
 
     fprintf(stdout, "\n\t\t\t Functions \n");
