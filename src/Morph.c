@@ -26,10 +26,6 @@
 
 // TODO :: Minimize floating point errors
 // TODO :: Allow customization
-// TODO :: Allow multiple graphs be drawn on the same window -> Done simply (No plot device yet)
-// TODO :: Load font library and label the axes -> Done// Make UI appealing -> Partially done
-
-// TODO Later : Add terminal and a parser
 
 #define TriggerBreakpoint()                                                                                            \
     {                                                                                                                  \
@@ -195,6 +191,71 @@ Mat4 MatrixMultiply(Mat4 *mat1, Mat4 *mat2)
     return matrix;
 }
 
+Mat4 InverseMatrix(Mat4 *mat)
+{
+    Mat4   inverse = {0};
+    float  det;
+    float *inv = &inverse.elem[0][0];
+    float *m   = &mat->elem[0][0];
+    int    i;
+
+    inv[0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15] + m[9] * m[7] * m[14] +
+             m[13] * m[6] * m[11] - m[13] * m[7] * m[10];
+
+    inv[4] = -m[4] * m[10] * m[15] + m[4] * m[11] * m[14] + m[8] * m[6] * m[15] - m[8] * m[7] * m[14] -
+             m[12] * m[6] * m[11] + m[12] * m[7] * m[10];
+
+    inv[8] = m[4] * m[9] * m[15] - m[4] * m[11] * m[13] - m[8] * m[5] * m[15] + m[8] * m[7] * m[13] +
+             m[12] * m[5] * m[11] - m[12] * m[7] * m[9];
+
+    inv[12] = -m[4] * m[9] * m[14] + m[4] * m[10] * m[13] + m[8] * m[5] * m[14] - m[8] * m[6] * m[13] -
+              m[12] * m[5] * m[10] + m[12] * m[6] * m[9];
+
+    inv[1] = -m[1] * m[10] * m[15] + m[1] * m[11] * m[14] + m[9] * m[2] * m[15] - m[9] * m[3] * m[14] -
+             m[13] * m[2] * m[11] + m[13] * m[3] * m[10];
+
+    inv[5] = m[0] * m[10] * m[15] - m[0] * m[11] * m[14] - m[8] * m[2] * m[15] + m[8] * m[3] * m[14] +
+             m[12] * m[2] * m[11] - m[12] * m[3] * m[10];
+
+    inv[9] = -m[0] * m[9] * m[15] + m[0] * m[11] * m[13] + m[8] * m[1] * m[15] - m[8] * m[3] * m[13] -
+             m[12] * m[1] * m[11] + m[12] * m[3] * m[9];
+
+    inv[13] = m[0] * m[9] * m[14] - m[0] * m[10] * m[13] - m[8] * m[1] * m[14] + m[8] * m[2] * m[13] +
+              m[12] * m[1] * m[10] - m[12] * m[2] * m[9];
+
+    inv[2] = m[1] * m[6] * m[15] - m[1] * m[7] * m[14] - m[5] * m[2] * m[15] + m[5] * m[3] * m[14] +
+             m[13] * m[2] * m[7] - m[13] * m[3] * m[6];
+
+    inv[6] = -m[0] * m[6] * m[15] + m[0] * m[7] * m[14] + m[4] * m[2] * m[15] - m[4] * m[3] * m[14] -
+             m[12] * m[2] * m[7] + m[12] * m[3] * m[6];
+
+    inv[10] = m[0] * m[5] * m[15] - m[0] * m[7] * m[13] - m[4] * m[1] * m[15] + m[4] * m[3] * m[13] +
+              m[12] * m[1] * m[7] - m[12] * m[3] * m[5];
+
+    inv[14] = -m[0] * m[5] * m[14] + m[0] * m[6] * m[13] + m[4] * m[1] * m[14] - m[4] * m[2] * m[13] -
+              m[12] * m[1] * m[6] + m[12] * m[2] * m[5];
+
+    inv[3] = -m[1] * m[6] * m[11] + m[1] * m[7] * m[10] + m[5] * m[2] * m[11] - m[5] * m[3] * m[10] -
+             m[9] * m[2] * m[7] + m[9] * m[3] * m[6];
+
+    inv[7] = m[0] * m[6] * m[11] - m[0] * m[7] * m[10] - m[4] * m[2] * m[11] + m[4] * m[3] * m[10] +
+             m[8] * m[2] * m[7] - m[8] * m[3] * m[6];
+
+    inv[11] = -m[0] * m[5] * m[11] + m[0] * m[7] * m[9] + m[4] * m[1] * m[11] - m[4] * m[3] * m[9] -
+              m[8] * m[1] * m[7] + m[8] * m[3] * m[5];
+
+    inv[15] = m[0] * m[5] * m[10] - m[0] * m[6] * m[9] - m[4] * m[1] * m[10] + m[4] * m[2] * m[9] + m[8] * m[1] * m[6] -
+              m[8] * m[2] * m[5];
+
+    det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+
+    det = 1.0 / det;
+
+    for (i = 0; i < 16; i++)
+        inv[i] = inv[i] * det;
+    return inverse;
+}
+
 void MatrixVectorMultiply(Mat4 *mat, float vec[4])
 {
     float result[4] = {0};
@@ -242,8 +303,10 @@ typedef struct
     Graph  *graph;
     Scene  *scene;
     Mat4   *scale_transform;
+    Mat4   *translation;
     Panel  *panel;
     Parser *parser; // hello to parser
+    Mat4   *new_transform;
 } UserData;
 
 const char *ShaderTypeName(ShaderType shader)
@@ -370,16 +433,13 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
     UserData   *data   = glfwGetWindowUserPointer(window);
     Graph      *graph  = data->graph;
 
-    // TODO :: There's some scaling imperfection while zooming in for grids. Maybe look at it later.
-
-    scroll_animation.g_init = graph->slide_scale.x / graph->scale.x;
-
     // capture mouse co-ordinates here
     double xPos, yPos;
-    glfwGetCursorPos(window, &xPos, &yPos);
+    double X, Y;
+    glfwGetCursorPos(window, &X, &Y);
 
     // shift the origin somewhere far from here
-    scroll_animation.s_init = graph->slide_scale.x;
+    // scroll_animation.s_init = graph->slide_scale.x;
 
     graph->slide_scale.y += scale * yoffset;
     graph->slide_scale.x += scale * yoffset;
@@ -423,11 +483,46 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
     // s                               = graph->slide_scale.x / graph->scale.x;
     //*scale_transform                = ScalarMatrix(s, s, 1.0f);
 
-    scroll_animation.should_animate = true;
-    scroll_animation.start          = glfwGetTime();
-    scroll_animation.g_term         = graph->slide_scale.x / graph->scale.x;
-    scroll_animation.sc_term        = graph->scale.x;
-    scroll_animation.s_term         = graph->slide_scale.x;
+    // scroll_animation.should_animate = true;
+    // scroll_animation.start          = glfwGetTime();
+    // scroll_animation.g_term         = graph->slide_scale.x / graph->scale.x;
+    // scroll_animation.sc_term        = graph->scale.x;
+    // scroll_animation.s_term         = graph->slide_scale.x;
+    float sx    = graph->slide_scale.x / graph->scale.x;
+
+    yPos        = screen_height - Y;
+    float vec[] = {X, yPos, 0.0f, 1.0f};
+    fprintf(stderr, "Old pos : (%5g, %5g).\n", vec[0], vec[1]);
+    Mat4 inverse = InverseMatrix(data->new_transform);
+    MatrixVectorMultiply(&inverse, vec);
+
+    fprintf(stderr, "xPos : %5g and yPos : %5g\n", vec[0], vec[1]);
+
+    *data->new_transform = IdentityMatrix();
+    Mat4 translation     = TranslationMatrix(-vec[0], -vec[1], 0.0f);
+    Mat4 scalar          = ScalarMatrix(sx / 100.0f, sx / 100.0f, 1.0f);
+    *data->new_transform = MatrixMultiply(&scalar, &translation);
+    translation          = TranslationMatrix(vec[0], vec[1], 0.0f);
+    *data->new_transform = MatrixMultiply(&translation, data->new_transform);
+
+    scalar               = ScalarMatrix(100, 100, 1.0f);
+    *data->new_transform = MatrixMultiply(&scalar, data->new_transform);
+    *data->new_transform = MatrixMultiply(data->translation, data->new_transform);
+
+    // Add a translation vector that will transform the previous position exactly to the new position
+    // Vec[0] and vec[1] are the fixed points, so translate the scene accordingly
+    float newpos[] = {vec[0], vec[1], 0.0f, 1.0f};
+    MatrixVectorMultiply(data->new_transform, newpos);
+    fprintf(stdout, "Newposition are : (%5g,%5g).\n", newpos[0], newpos[1]);
+
+    Mat4 newtranslation  = TranslationMatrix(X - newpos[0], (screen_height - Y) - newpos[1], 0.0f);
+    *data->new_transform = MatrixMultiply(&newtranslation, data->new_transform);
+    newpos[0]            = vec[0];
+    newpos[1]            = vec[1];
+    MatrixVectorMultiply(data->new_transform, newpos);
+    fprintf(stdout, "Newposition after fixing are : (%5g,%5g).\n", newpos[0], newpos[1]);
+
+    fprintf(stdout, "SX : %5g.\n", sx);
 }
 
 unsigned int LoadProgram(Shader vertex, Shader fragment)
@@ -950,7 +1045,7 @@ void PlotParametric(Scene *scene, parametricfn func, Graph *graph)
 }
 
 void HandleEvents(GLFWwindow *window, State *state, Graph *graph, Mat4 *world_transform, Mat4 *scale_matrix,
-                  Panel *panel);
+                  Panel *panel, Mat4 *new_transform, Mat4 *scene_transform);
 
 void LoadFont(Font *font, const char *font_dir)
 {
@@ -1244,6 +1339,7 @@ void RenderLabels(Scene *scene, Font *font, Graph *graph, Mat4 *combined_matrix)
 //     scene_group->graphname[scene_group->graphcount - 1]  = GiveOnlyStaticStrings;
 // }
 
+// From computation context not handled yet
 bool InvokeAndTestFunction(void *function, FunctionType type, MVec2 vec)
 {
     switch (type)
@@ -1257,7 +1353,7 @@ bool InvokeAndTestFunction(void *function, FunctionType type, MVec2 vec)
 }
 
 void HandleEvents(GLFWwindow *window, Scene *scene, State *state, Graph *graph, Mat4 *translate_matrix,
-                  Mat4 *scale_matrix, Panel *panel)
+                  Mat4 *scale_matrix, Panel *panel, Mat4 *new_transform, Mat4 *scene_transform)
 {
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
     {
@@ -1278,8 +1374,13 @@ void HandleEvents(GLFWwindow *window, Scene *scene, State *state, Graph *graph, 
             Mat4   translate  = TranslationMatrix(delX, -delY, 0.0f);
             *translate_matrix = MatrixMultiply(&translate, translate_matrix);
 
-            state->xpos       = xpos;
-            state->ypos       = ypos;
+            //// The transform need to be carried out in current screen position
+            //// Do the inverse transformation first
+            // Mat4 translation = TranslationMatrix(delX, -delY, 0.0f);
+            *new_transform = MatrixMultiply(&translate, new_transform);
+
+            state->xpos    = xpos;
+            state->ypos    = ypos;
         }
         }
     }
@@ -1294,12 +1395,15 @@ void HandleEvents(GLFWwindow *window, Scene *scene, State *state, Graph *graph, 
         glfwGetCursorPos(window, &xpos, &ypos);
         // use the inverse mapping to find the original vector point
 
-        float vec[]             = {xpos, screen_height - ypos, 0.0f, 1.0f};
-        Mat4  inverse_translate = TranslationMatrix(-translate_matrix->elem[0][3], -translate_matrix->elem[1][3], 0.0f);
-        Mat4  inverse_scale     = ScalarMatrix(1.0f / scale_matrix->elem[0][0], 1.0f / scale_matrix->elem[1][1], 1.0f);
-        Mat4  inverse           = MatrixMultiply(&inverse_scale, &inverse_translate);
+        float vec[] = {xpos - scroll_animation.offset, screen_height - ypos, 0.0f, 1.0f};
+        // Mat4  inverse_translate = TranslationMatrix(-translate_matrix->elem[0][3], -translate_matrix->elem[1][3],
+        // 0.0f); Mat4  inverse_scale     = ScalarMatrix(1.0f / scale_matrix->elem[0][0], 1.0f /
+        // scale_matrix->elem[1][1], 1.0f); Mat4  inverse           = MatrixMultiply(&inverse_scale,
+        // &inverse_translate);
+        Mat4 inverse = InverseMatrix(new_transform);
         MatrixVectorMultiply(&inverse, vec);
 
+        fprintf(stderr, "Points selected : %5g and %5g.\n", vec[0], vec[1]);
         // loop through all the functions
         scene->plots.current_selection = -1;
         for (uint32_t fn = 0; fn < scene->plots.count; ++fn)
@@ -1443,7 +1547,12 @@ MorphPlotDevice MorphCreateDevice()
     if (scale_matrix)
         *scale_matrix = IdentityMatrix();
 
-    Graph *graph = malloc(sizeof(*graph));
+    Mat4 *new_transform = malloc(sizeof(Mat4));
+    if (new_transform)
+        *new_transform = IdentityMatrix();
+
+    *new_transform = ScalarMatrix(200.0f, 200.0f, 1.0f);
+    Graph *graph   = malloc(sizeof(*graph));
     InitGraph(graph);
 
     Font *ComicSans = malloc(sizeof(*ComicSans));
@@ -1462,7 +1571,9 @@ MorphPlotDevice MorphCreateDevice()
                            .scale_transform = scale_matrix,
                            .panel           = panel,
                            .parser          = parser,
-                           .scene           = scene};
+                           .scene           = scene,
+                           .new_transform   = new_transform, // The ultimate transformation
+                           .translation     = world_matrix};
 
     glfwSetWindowUserPointer(device.window, data);
 
@@ -1480,6 +1591,7 @@ MorphPlotDevice MorphCreateDevice()
     device.transform       = ortho_matrix;
     device.world_transform = world_matrix;
     device.scale_matrix    = scale_matrix;
+    device.new_transform   = new_transform; // Make the operations cumulatives
 
 // Initialize timer here
 #ifdef _WIN32
@@ -1814,38 +1926,37 @@ double Square(double x)
     return x * x;
 }
 
-void Draw(MorphPlotDevice *device, Mat4 *translate, Mat4* scale, bool show_points)
+// The whole transform is messy, gotta clean it up
+void Draw(MorphPlotDevice *device, Mat4 *translate, Mat4 *scale, bool show_points)
 {
-    // When offset changes the point of origin also shifts at certain distance away 
-    float Y               = device->graph->slide_scale.x; 
+    // When offset changes the point of origin also shifts at certain distance away
+    float Y               = device->graph->slide_scale.x;
 
-    Mat4 outer_transform = MatrixMultiply(translate, scale);
+    Mat4  outer_transform = *device->new_transform;
     *device->transform =
         OrthographicProjection(0, screen_width - scroll_animation.offset, 0, screen_height, -1.0f, 1.0f);
     glViewport(scroll_animation.offset, 0, screen_width - scroll_animation.offset, screen_height);
-    
-    Mat4 translater = TranslationMatrix(scroll_animation.offset, 0.0f,0.0f); 
 
-    Mat4 graph_transform = MatrixMultiply(translate, &translater); 
-    graph_transform = MatrixMultiply(&graph_transform, scale); 
+    Mat4 translater              = TranslationMatrix(scroll_animation.offset, 0.0f, 0.0f);
 
-    float X = device->graph->slide_scale.x * ( 1.0f - scroll_animation.offset/screen_width); 
-    float f = 1.0f - scroll_animation.offset/screen_width; 
+    Mat4 graph_transform         = *device->new_transform;
+    graph_transform              = MatrixMultiply(&translater, &graph_transform);
 
-    device->graph->slide_scale.x = X; 
-    device->graph->slide_scale.y = X; 
+    float f                      = 1.0f;
+    device->graph->slide_scale.x = Y;
+    device->graph->slide_scale.y = Y;
 
     Mat4 nscalar                 = ScalarMatrix(scale->elem[0][0] * f, scale->elem[1][1] * f, 1.0f);
-    Mat4 ntransform              = MatrixMultiply(translate, &nscalar); 
+    Mat4 ntransform              = MatrixMultiply(translate, &nscalar);
 
-    RenderGraph(device->graph, &graph_transform, X, X);
-    RenderScene(device->scene, device->program, false, device->transform, &ntransform);
-    
+    RenderGraph(device->graph, &graph_transform, Y, Y);
+    RenderScene(device->scene, device->program, false, device->transform, device->new_transform);
+
     RenderLabels(device->scene, device->font, device->graph, &outer_transform);
     RenderFont(device->scene, device->font, device->transform);
-    
-    device->graph->slide_scale.x = Y; 
-    device->graph->slide_scale.y = Y; 
+
+    device->graph->slide_scale.x = Y;
+    device->graph->slide_scale.y = Y;
 }
 
 void MorphPlot(MorphPlotDevice *device)
@@ -1854,19 +1965,18 @@ void MorphPlot(MorphPlotDevice *device)
     Shader   fragment = LoadShader("./src/shader/common_2D.fs", FRAGMENT_SHADER);
     uint32_t program  = LoadProgram(vertex, fragment);
 
-    Mat4     matrix, identity;
+    Mat4     identity;
 
     // Since all of them need to respond to function only once, it needs to go inside key callback
 
     while (!glfwWindowShouldClose(device->window))
     {
-        matrix = MatrixMultiply(device->world_transform, device->scale_matrix);
-
+        // matrix = MatrixMultiply(device->world_transform, device->scale_matrix);
         // RenderGraph(device->graph, device->world_transform);
         // RenderScene(device->scene, device->program, false, device->transform, &matrix);
         // RenderLabels(device->scene, device->font, device->graph, &matrix);
         // RenderFont(device->scene, device->font, device->transform);
-        Draw(device, device->world_transform,device->scale_matrix, false);
+        Draw(device, device->world_transform, device->scale_matrix, false);
 
         glUseProgram(program);
         identity = MatrixMultiply(device->transform, &device->panel->render.local_transform);
@@ -1880,7 +1990,7 @@ void MorphPlot(MorphPlotDevice *device)
         device->scene->axes_labels.count                      = 0;
 
         HandleEvents(device->window, device->scene, device->panner, device->graph, device->world_transform,
-                     device->scale_matrix, device->panel);
+                     device->scale_matrix, device->panel, device->new_transform, device->transform);
         glfwSwapBuffers(device->window);
         glfwPollEvents();
     }

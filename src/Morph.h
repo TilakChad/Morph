@@ -29,7 +29,7 @@ typedef MVec2 (*ParametricFn2D)(double);
 
 typedef double (*ImplicitFn2D)(double x, double y);
 
-typedef struct Panel Panel; 
+typedef struct Panel Panel;
 
 typedef struct
 {
@@ -42,7 +42,9 @@ typedef struct
     Font        *font;
     Mat4        *transform;
     Mat4        *world_transform;
-    Mat4        *scale_matrix; 
+    Mat4        *scale_matrix;
+
+    Mat4        *new_transform;
     State       *panner;
     bool         should_close;
     struct Timer
@@ -50,7 +52,7 @@ typedef struct
         uint64_t frequency;
         uint64_t count;
     } timer;
-    Panel *panel; 
+    Panel *panel;
 } MorphPlotDevice;
 
 // Exposed func
