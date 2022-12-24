@@ -20,10 +20,17 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="glad\src\glad.c" />
+    <ClCompile Include="src\interactive.c" />
+    <ClCompile Include="src\main.c" />
     <ClCompile Include="src\Morph.c" />
+    <ClCompile Include="src\parser.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\interactive.h" />
     <ClInclude Include="src\Morph.h" />
+    <ClInclude Include="src\parser.h" />
+    <ClInclude Include="src\render_common.h" />
+    <ClInclude Include="src\stb_truetype.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="include\text_fragment.glsl" />
@@ -31,6 +38,8 @@
     <None Include="src\shader\aaline.fs" />
     <None Include="src\shader\aaline.gs" />
     <None Include="src\shader\aaline.vs" />
+    <None Include="src\shader\common_2D.fs" />
+    <None Include="src\shader\common_2D.vs" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
