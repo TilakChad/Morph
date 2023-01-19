@@ -503,7 +503,7 @@ int nmain(int argc, char **argv)
 
     panel->render.font = malloc(sizeof(Font));
     // LoadFont(ComicSans, "./include/comic.ttf");
-    LoadSystemFont(panel->render.font, "comic.ttf");
+    LoadSystemFont(panel->render.font, "consolas.ttf");
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

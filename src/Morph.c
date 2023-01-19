@@ -24,6 +24,9 @@
 
 #include "./parser.h"
 
+// For exporting to bmp
+#include "../utility/bmp.h"
+
 // TODO :: Minimize floating point errors
 // TODO :: Allow customization
 
@@ -32,7 +35,6 @@
 #elif defined(_MSC_VER)
 #define Unreachable() __assume(false);
 #endif
-
 
 #define TriggerBreakpoint()                                                                                            \
     {                                                                                                                  \
@@ -338,7 +340,13 @@ void ErrorCallback(int code, const char *description)
 void Plot1DFromComputationContext(Scene *scene, ComputationContext *context, Graph *graph, MVec3 color,
                                   const char *legend);
 
-void FrameChangeCallback(GLFWwindow *window, int width, int height)
+struct
+{
+    GLuint fbo, tex;
+} AlternateFrameBuffer;
+unsigned int active_fbo = 0;
+
+void         FrameChangeCallback(GLFWwindow *window, int width, int height)
 {
     screen_width  = width;
     screen_height = height;
@@ -353,6 +361,50 @@ static void KeyCallback(GLFWwindow *window, int key, int scancode, int action, i
 {
     if (key == GLFW_KEY_ESCAPE)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
+    if (key == GLFW_KEY_S && mod == GLFW_MOD_CONTROL && action == GLFW_PRESS)
+    {
+        fprintf(stderr, "\nAttempting to take a screenshot ... ");
+        // Take screenshot from the default buffer by blitting it into the alternate buffer
+
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, AlternateFrameBuffer.fbo);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+
+        glBlitFramebuffer(0, 0, screen_width, screen_height, 0, 0, 1080, 720, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, AlternateFrameBuffer.fbo);
+
+        const uint32_t channels = 3;
+        uint8_t       *buffer   = malloc(sizeof(uint8_t) * 1080 * 720 * channels);
+        glReadPixels(0, 0, 1080, 720, GL_RGB, GL_UNSIGNED_BYTE, buffer);
+
+        // Export to bmp using the handcrafted library
+        const uint32_t out_width    = 1080;
+        const uint32_t out_height   = 720;
+        const char    *out_filename = "screenshot.bmp";
+
+        const uint64_t size_required =
+            out_width * out_height * channels +
+            10000; // Extra bytes for padding, can be precisely calculated but omitted for now
+        {
+            BMP bmp = {0};
+            InitBMP(&bmp, size_required, channels, false);
+            WriteBMPHeader(&bmp);
+            WriteBMPData(&bmp, buffer, out_width, out_height, channels);
+            WriteBMPToFile(&bmp, out_filename);
+            DestroyBMP(&bmp);
+        }
+        free(buffer);
+        return;
+    }
+    if (key == GLFW_KEY_F && mod == GLFW_MOD_CONTROL && action == GLFW_PRESS)
+    {
+        if (active_fbo == 0)
+            active_fbo = AlternateFrameBuffer.fbo;
+        else
+            active_fbo = 0;
+        return;
+    }
+
     UserData *data = glfwGetWindowUserPointer(window);
     if (key == GLFW_KEY_ENTER && action == GLFW_PRESS)
     {
@@ -498,6 +550,7 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
     float sx    = graph->slide_scale.x / graph->scale.x;
 
     yPos        = screen_height - Y;
+    X           = X - scroll_animation.offset;
     float vec[] = {X, yPos, 0.0f, 1.0f};
     fprintf(stderr, "Old pos : (%5g, %5g).\n", vec[0], vec[1]);
     Mat4 inverse = InverseMatrix(data->new_transform);
@@ -629,7 +682,7 @@ Shader LoadShader(const char *shader_path, ShaderType type)
     }
     shader.shader = glCreateShader(shader_define);
     shader.type   = type;
-    glShaderSource(shader.shader, 1, (const char* const *)&str.data, NULL);
+    glShaderSource(shader.shader, 1, (const char *const *)&str.data, NULL);
     glCompileShader(shader.shader);
     int compiled;
     glGetShaderiv(shader.shader, GL_COMPILE_STATUS, &compiled);
@@ -809,12 +862,17 @@ void InitGraph(Graph *graph)
                                           "main() \r\n{ \r\n\tgl_Position = vec4(aPos,0.0f,1.0f);\r\n}",
                                           VERTEX_SHADER);
     Shader fragment = LoadShadersFromString(
-        "#version 330 core \r\n\r\nout vec4 color; \r\n\r\n// not working with uniform buffer for now \r\n// Lets try "
+        "#version 330 core \r\n\r\nout vec4 color; \r\n\r\n// not working with uniform buffer for now \r\n// Lets "
+        "try "
         "drawing a checkerboard \r\n// uniform int scale;\r\n\r\nuniform vec2 scale;\r\nuniform int "
-        "grid_width;\r\n\r\nuniform vec2 center; \r\n\r\nvoid main() \r\n{\r\n\tvec2 scr = gl_FragCoord.xy;\r\n\tint "
-        "delX = abs(int(scr.x-center.x)); \r\n\tint delY = abs(int(scr.y-center.y));\r\n\t\r\n\tint X = int(scale.x); "
-        "\r\n\tif (X % 2 != 0) \r\n\t\tX = X + 1; \r\n\r\n\tint Y = X;\r\n\r\n\tint halfX = X / 2; \r\n\tint halfY = "
-        "halfX; \r\n\r\n\t// TODO :: Rewrite it in branchless way \r\n\tif ( (delX % halfX <= grid_width) || (delY % "
+        "grid_width;\r\n\r\nuniform vec2 center; \r\n\r\nvoid main() \r\n{\r\n\tvec2 scr = "
+        "gl_FragCoord.xy;\r\n\tint "
+        "delX = abs(int(scr.x-center.x)); \r\n\tint delY = abs(int(scr.y-center.y));\r\n\t\r\n\tint X = "
+        "int(scale.x); "
+        "\r\n\tif (X % 2 != 0) \r\n\t\tX = X + 1; \r\n\r\n\tint Y = X;\r\n\r\n\tint halfX = X / 2; \r\n\tint halfY "
+        "= "
+        "halfX; \r\n\r\n\t// TODO :: Rewrite it in branchless way \r\n\tif ( (delX % halfX <= grid_width) || (delY "
+        "% "
         "halfY <= grid_width))\r\n\t\tcolor = vec4(0.0f,0.7f,0.7f,1.0f); \r\n\telse\r\n\t\tcolor = "
         "vec4(1.0f,1.0f,1.0f,1.0f);\r\n\t\t\r\n\tif ( (delX % X <= grid_width+2) || (delY % Y <= "
         "grid_width+2))\r\n\t\tcolor = vec4(0.5f,0.5f,0.5f,1.0f);\r\n\r\n\r\n\tif (abs(scr.x - center.x) < 3.0f) "
@@ -1151,7 +1209,8 @@ void LoadFont(Font *font, const char *font_dir)
     font->size  = fontSize;
     // Font shaders and program
     Shader font_vertex = LoadShadersFromString(
-        "#version 330 core \r\n\r\nlayout (location = 0) in vec2 aPos; \r\nlayout (location = 1) in vec2 Tex;\r\n// "
+        "#version 330 core \r\n\r\nlayout (location = 0) in vec2 aPos; \r\nlayout (location = 1) in vec2 "
+        "Tex;\r\n// "
         "might need a matrix somewhere here \r\n\r\nout vec2 TexCoord; \r\nuniform mat4 scene; \r\n\r\nvoid "
         "main()\r\n{\r\n\tgl_Position = scene * vec4(aPos,0.0f,1.0f);\r\n\tTexCoord = Tex; \r\n}",
         VERTEX_SHADER);
@@ -1312,8 +1371,8 @@ void RenderLabels(Scene *scene, Font *font, Graph *graph, Mat4 *combined_matrix)
 //         scene_group->graphbreak[scene_group->graphcount++]   = scene_group->vCount;
 //         scene_group->graphcolor[scene_group->graphcount - 1] = scene_group->graphcolor[label];
 //         FillText(scene_group, font, (MVec2){pos.x + 75, pos.y - font->height / 2},
-//                  (String){.data = scene_group->graphname[label], .length = strlen(scene_group->graphname[label])},
-//                  0);
+//                  (String){.data = scene_group->graphname[label], .length =
+//                  strlen(scene_group->graphname[label])}, 0);
 //
 //         pos.y -= font->height;
 //     }
@@ -1519,7 +1578,8 @@ MorphPlotDevice MorphCreateDevice()
 
     srand(time(NULL));
     // Shader vertex =
-    //     LoadShadersFromString("#version 330 core \r\nlayout (location = 0) in vec2 aPos; \r\n\r\nuniform mat4 scene;
+    //     LoadShadersFromString("#version 330 core \r\nlayout (location = 0) in vec2 aPos; \r\n\r\nuniform mat4
+    //     scene;
     //     "
     //                           "\r\n\r\nvoid main() \r\n{\r\n\tgl_Position = scene * vec4(aPos,0.0f,1.0f);\r\n}",
     //                           VERTEX_SHADER);
@@ -1643,10 +1703,8 @@ MorphPlotDevice MorphCreateDevice()
 //
 //    for (float x = init; x <= term; x += step)
 //    {
-//        // This API version doesn't check for discontinuity .. Above function checks for discontinuity of one function
-//        vec.x = x;
-//        vec.y = fn(vec.x);
-//        AddSinglePoint(device->render_scene, vec);
+//        // This API version doesn't check for discontinuity .. Above function checks for discontinuity of one
+//        function vec.x = x; vec.y = fn(vec.x); AddSinglePoint(device->render_scene, vec);
 //    }
 //    // Add number of vertices in the current graph
 //    assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
@@ -1712,7 +1770,8 @@ bool MorphShouldWindowClose(MorphPlotDevice *device)
 //         RenderGraph(device->graph);
 //         glUseProgram(device->program);
 //         glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE,
-//         &device->transform->elem[0][0]); glBindVertexArray(device->vao); glBindBuffer(GL_ARRAY_BUFFER, device->vbo);
+//         &device->transform->elem[0][0]); glBindVertexArray(device->vao); glBindBuffer(GL_ARRAY_BUFFER,
+//         device->vbo);
 //
 //         RenderLabels(device->render_scene, device->font, device->graph, device->transform);
 //         DrawLegends(device->render_scene, device->font, device->graph);
@@ -1740,9 +1799,8 @@ bool MorphShouldWindowClose(MorphPlotDevice *device)
 //     RenderGraph(device->graph);
 //
 //     glUseProgram(device->program);
-//     glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE, &device->transform->elem[0][0]);
-//     glBindVertexArray(device->vao);
-//     glBindBuffer(GL_ARRAY_BUFFER, device->vbo);
+//     glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE,
+//     &device->transform->elem[0][0]); glBindVertexArray(device->vao); glBindBuffer(GL_ARRAY_BUFFER, device->vbo);
 //
 //     RenderLabels(device->render_scene, device->font, device->graph, device->transform);
 //     DrawLegends(device->render_scene, device->font, device->graph);
@@ -1852,8 +1910,9 @@ void ImplicitFunctionPlot2D(MorphPlotDevice *device, ImplicitFn2D fn)
 
     while (plots--)
     {
-        // To reach the contour line, we must travel along the partial derivatives first and use Newton Raphson method
-        // to find the point of contour Taking y constant for now and moving in the direction of partial derivative
+        // To reach the contour line, we must travel along the partial derivatives first and use Newton Raphson
+        // method to find the point of contour Taking y constant for now and moving in the direction of partial
+        // derivative
         scene->plots.functions[scene->plots.count].max     = max_verts; // 1000 vertices for each graph at most
         scene->plots.functions[scene->plots.count].samples = malloc(sizeof(MVec2) * max_verts);
 
@@ -1884,15 +1943,16 @@ void ImplicitFunctionPlot2D(MorphPlotDevice *device, ImplicitFn2D fn)
         while (max_movement--)
         {
             // Calculate delX and delY such that they remains in the contour
-            // dy = -hstep * PartialDerivativeX(fn, vec.x, vec.y, h) / PartialDerivativeY(fn, vec.x + hstep, vec.y, h);
+            // dy = -hstep * PartialDerivativeX(fn, vec.x, vec.y, h) / PartialDerivativeY(fn, vec.x + hstep, vec.y,
+            // h);
 
             // If the path can't remain in the contour, then dx will be ??
-            // dx = hstep; // -hstep * PartialDerivativeY(fn, vec.x, vec.y, h) / PartialDerivativeX(fn, vec.x, vec.y +
-            // kstep, h); else
+            // dx = hstep; // -hstep * PartialDerivativeY(fn, vec.x, vec.y, h) / PartialDerivativeX(fn, vec.x, vec.y
+            // + kstep, h); else
             // {
             //     x_inc =
-            //         -hstep * PartialDerivativeY(fn, vec.x, vec.y, h) / PartialDerivativeX(fn, vec.x, vec.y + kstep,
-            //         h);
+            //         -hstep * PartialDerivativeY(fn, vec.x, vec.y, h) / PartialDerivativeX(fn, vec.x, vec.y +
+            //         kstep, h);
 
             // }
             // Trace back to the contour after the increment
@@ -1966,6 +2026,78 @@ void Draw(MorphPlotDevice *device, Mat4 *translate, Mat4 *scale, bool show_point
     device->graph->slide_scale.y = Y;
 }
 
+// void MorphPlot(MorphPlotDevice *device)
+//{
+//     Shader   vertex   = LoadShader("./src/shader/common_2D.vs", VERTEX_SHADER);
+//     Shader   fragment = LoadShader("./src/shader/common_2D.fs", FRAGMENT_SHADER);
+//     uint32_t program  = LoadProgram(vertex, fragment);
+//
+//     Mat4     identity;
+//
+//     // Since all of them need to respond to function only once, it needs to go inside key callback
+//
+//     while (!glfwWindowShouldClose(device->window))
+//     {
+//         // matrix = MatrixMultiply(device->world_transform, device->scale_matrix);
+//         // RenderGraph(device->graph, device->world_transform);
+//         // RenderScene(device->scene, device->program, false, device->transform, &matrix);
+//         // RenderLabels(device->scene, device->font, device->graph, &matrix);
+//         // RenderFont(device->scene, device->font, device->transform);
+//         Draw(device, device->world_transform, device->scale_matrix, false);
+//
+//         glUseProgram(program);
+//         identity = MatrixMultiply(device->transform, &device->panel->render.local_transform);
+//         glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_TRUE,
+//                            (const GLfloat *)&identity.elem[0][0]);
+//
+//         glViewport(0, 0, screen_width, screen_height);
+//         RenderPanel(device->panel, device->panel->render.font, device->transform);
+//
+//         device->panel->render.font_batch->vertex_buffer.count = 0;
+//         device->scene->axes_labels.count                      = 0;
+//
+//         HandleEvents(device->window, device->scene, device->panner, device->graph, device->world_transform,
+//                      device->scale_matrix, device->panel, device->new_transform, device->transform);
+//         glfwSwapBuffers(device->window);
+//         glfwPollEvents();
+//     }
+// }
+
+bool CreateAlternateFrameBuffer(uint32_t width, uint32_t height)
+{
+    GLuint fbo;
+    glGenFramebuffers(1, &fbo);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    // Texture attachments
+    GLuint tex;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Bind the texture as the color attachment
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+
+    // Check for framebuffer completion
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        fprintf(stderr, "GLFramebuffer incomplete");
+        return false;
+    }
+    else
+        fprintf(stderr, "GLFRamebuffer completed");
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    AlternateFrameBuffer.fbo = fbo;
+    AlternateFrameBuffer.tex = tex;
+    return true;
+}
+
 void MorphPlot(MorphPlotDevice *device)
 {
     Shader   vertex   = LoadShader("./src/shader/common_2D.vs", VERTEX_SHADER);
@@ -1974,6 +2106,7 @@ void MorphPlot(MorphPlotDevice *device)
 
     Mat4     identity;
 
+    GLuint   fbo = CreateAlternateFrameBuffer(1080, 720);
     // Since all of them need to respond to function only once, it needs to go inside key callback
 
     while (!glfwWindowShouldClose(device->window))
@@ -1983,21 +2116,36 @@ void MorphPlot(MorphPlotDevice *device)
         // RenderScene(device->scene, device->program, false, device->transform, &matrix);
         // RenderLabels(device->scene, device->font, device->graph, &matrix);
         // RenderFont(device->scene, device->font, device->transform);
-        Draw(device, device->world_transform, device->scale_matrix, false);
+        if (active_fbo == 0)
+        {
 
-        glUseProgram(program);
-        identity = MatrixMultiply(device->transform, &device->panel->render.local_transform);
-        glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_TRUE,
-                           (const GLfloat *)&identity.elem[0][0]);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            Draw(device, device->world_transform, device->scale_matrix, false);
 
-        glViewport(0, 0, screen_width, screen_height);
-        RenderPanel(device->panel, device->panel->render.font, device->transform);
+            glUseProgram(program);
+            identity = MatrixMultiply(device->transform, &device->panel->render.local_transform);
+            glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_TRUE,
+                               (const GLfloat *)&identity.elem[0][0]);
 
-        device->panel->render.font_batch->vertex_buffer.count = 0;
-        device->scene->axes_labels.count                      = 0;
+            glViewport(0, 0, screen_width, screen_height);
+            RenderPanel(device->panel, device->panel->render.font, device->transform);
 
-        HandleEvents(device->window, device->scene, device->panner, device->graph, device->world_transform,
-                     device->scale_matrix, device->panel, device->new_transform, device->transform);
+            device->panel->render.font_batch->vertex_buffer.count = 0;
+            device->scene->axes_labels.count                      = 0;
+
+            HandleEvents(device->window, device->scene, device->panner, device->graph, device->world_transform,
+                         device->scale_matrix, device->panel, device->new_transform, device->transform);
+        }
+        else
+        {
+            // Blit just once
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, active_fbo);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+            glBlitFramebuffer(0, 0, 1080, 720, 0, 0, screen_width, screen_height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
         glfwSwapBuffers(device->window);
         glfwPollEvents();
     }

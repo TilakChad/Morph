@@ -24,6 +24,7 @@
     <ClCompile Include="src\main.c" />
     <ClCompile Include="src\Morph.c" />
     <ClCompile Include="src\parser.c" />
+    <ClCompile Include="utility\bmp.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\interactive.h" />
@@ -31,6 +32,7 @@
     <ClInclude Include="src\parser.h" />
     <ClInclude Include="src\render_common.h" />
     <ClInclude Include="src\stb_truetype.h" />
+    <ClInclude Include="utility\bmp.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="include\text_fragment.glsl" />
