@@ -13,7 +13,7 @@
 
 #include "./render_common.h"
 
-#include "./stb_truetype.h"
+#include "../utility/stb_truetype.h"
 
 static void FillText(GPUBatch *font_data, Font *font, Pos2D position, String str, uint16_t *advancement, float scale)
 {

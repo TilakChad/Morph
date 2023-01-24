@@ -11,7 +11,7 @@
 #endif
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "./stb_truetype.h"
+#include "../utility/stb_truetype.h"
 
 #include <assert.h>
 #include <float.h>
@@ -384,7 +384,7 @@ static void KeyCallback(GLFWwindow *window, int key, int scancode, int action, i
 
         const uint64_t size_required =
             out_width * out_height * channels +
-            10000; // Extra bytes for padding, can be precisely calculated but omitted for now
+            100000; // Extra bytes for padding, can be precisely calculated but omitted for now
         {
             BMP bmp = {0};
             InitBMP(&bmp, size_required, channels, false);
@@ -794,7 +794,7 @@ struct State
 GPUBatch *CreateNewBatch(Primitives primitive)
 {
     GPUBatch *batch          = malloc(sizeof(*batch));
-    batch->vertex_buffer.max = 35000;
+    batch->vertex_buffer.max = 100000;
     batch->primitive         = primitive;
 
     glGenVertexArrays(1, &batch->vao);
@@ -802,7 +802,7 @@ GPUBatch *CreateNewBatch(Primitives primitive)
     glBindBuffer(GL_ARRAY_BUFFER, batch->vertex_buffer.vbo);
     glBufferData(GL_ARRAY_BUFFER, batch->vertex_buffer.max * sizeof(*batch->vertex_buffer.data), NULL, GL_STATIC_DRAW);
 
-    batch->vertex_buffer.max   = 35000;
+    batch->vertex_buffer.max   = 100000;
     batch->vertex_buffer.count = 0;
     batch->vertex_buffer.dirty = true;
     batch->vertex_buffer.data  = malloc(sizeof(uint8_t) * batch->vertex_buffer.max);
@@ -813,7 +813,7 @@ GPUBatch *CreateNewBatch(Primitives primitive)
 void DrawBatch(GPUBatch *batch, uint32_t counts)
 {
     glBindVertexArray(batch->vao);
-    glDrawArrays(batch->primitive, 0, counts);
+    glDrawArrays(batch->primitive, 0, counts - 5);
 }
 
 void PrepareBatch(GPUBatch *batch)
@@ -1015,16 +1015,17 @@ void ResetScene(Scene *scene_group)
 void Plot1D(Scene *scene, ParametricFn1D func, Graph *graph, MVec3 color, const char *legend)
 {
     // No check done here currently
-    const uint32_t max_verts                           = 1000;
+    const uint32_t max_verts                           = 10000;
     scene->plots.functions[scene->plots.count].max     = max_verts; // 1000 vertices for each graph at most
     scene->plots.functions[scene->plots.count].samples = malloc(sizeof(MVec2) * max_verts);
+    assert(scene->plots.functions[scene->plots.count].samples);
 
-    float             init                             = -10.0f;
-    float             term                             = 10.0f;
-    float             step                             = 0.1f;
+    float             init     = -10.0f;
+    float             term     = 10.0f;
+    float             step     = 0.1f;
 
-    FunctionPlotData *function                         = &scene->plots.functions[scene->plots.count];
-    function->fn_type                                  = PARAMETRIC_1D;
+    FunctionPlotData *function = &scene->plots.functions[scene->plots.count];
+    function->fn_type          = PARAMETRIC_1D;
 
     VertexData2D vec;
     vec.x                                = init;
@@ -1048,6 +1049,52 @@ void Plot1D(Scene *scene, ParametricFn1D func, Graph *graph, MVec3 color, const 
     }
     function->color    = color;
     function->function = func;
+    function->batch    = CreateNewBatch(LINE_STRIP);
+    assert(function->batch);
+    function->updated = true;
+    scene->plots.count++;
+}
+
+void MorphParametric2DPlot(Scene *scene, ParametricFn2D fn, float tInit, float tTerm, MVec3 rgb, const char *cstronly,
+                           float step_)
+{
+    const uint32_t max_verts                           = 10000;
+    scene->plots.functions[scene->plots.count].max     = max_verts; // 1000 vertices for each graph at most
+    scene->plots.functions[scene->plots.count].samples = malloc(sizeof(MVec2) * max_verts);
+    scene->plots.functions[scene->plots.count].count   = 0;
+
+    float             init                             = tInit;
+    float             term                             = tTerm;
+    float             step                             = step_;
+
+    FunctionPlotData *function                         = &scene->plots.functions[scene->plots.count];
+    function->fn_type                                  = PARAMETRIC_2D;
+
+    VertexData2D vec;
+    MVec2        sample                  = fn(init);
+    vec.x                                = sample.x;
+    vec.y                                = sample.y;
+    vec.n_x                              = 1.0f;
+    vec.n_y                              = 1.0f;
+
+    function->samples[function->count++] = vec;
+
+    float n_x, n_y;
+    for (float t = init + step; t <= term; t += step)
+    {
+        sample = fn((double)t);
+        vec.x  = sample.x;
+        vec.y  = sample.y;
+        // fprintf(stderr, "\nSampled : [%5g, %5g].", sample.x, sample.y);
+        assert(function->count * 2 < function->max);
+        n_x                                        = vec.x - function->samples[function->count - 1].x;
+        n_y                                        = vec.y - function->samples[function->count - 1].y;
+        function->samples[function->count - 1].n_x = n_x;
+        function->samples[function->count - 1].n_y = n_y;
+        function->samples[function->count++]       = vec;
+    }
+    function->color    = rgb;
+    function->function = NULL;
     function->batch    = CreateNewBatch(LINE_STRIP);
     function->updated  = true;
     scene->plots.count++;
@@ -1570,11 +1617,12 @@ Shader LoadShadersFromString(const char *cstr, ShaderType type)
     return shader;
 }
 
+uint32_t        program;
 MorphPlotDevice MorphCreateDevice()
 {
     MorphPlotDevice device;
 
-    device.window = LoadGLFW(screen_width, screen_height, "Morph Graph");
+    device.window = LoadGLFW(screen_width, screen_height, "The Morph");
 
     srand(time(NULL));
     // Shader vertex =
@@ -1683,6 +1731,13 @@ MorphPlotDevice MorphCreateDevice()
     scroll_animation.duration_constant = 0.05f;
     scroll_animation.offset_changed    = true;
     scroll_animation.offset            = 0.0f;
+    {
+
+        Shader vertex   = LoadShader("./src/shader/common_2D.vs", VERTEX_SHADER);
+        Shader fragment = LoadShader("./src/shader/common_2D.fs", FRAGMENT_SHADER);
+        program         = LoadProgram(vertex, fragment);
+    }
+
     return device;
 }
 //
@@ -1840,10 +1895,30 @@ void MorphDestroyDevice(MorphPlotDevice *device)
 //     device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
 // }
 
-// void MorphResetPlotting(MorphPlotDevice *device)
-//{
-//     ResetRenderScene(device->render_scene);
-// }
+void ResetRenderScene(Scene *scene)
+{
+    static int counter = 0;
+    counter++;
+    for (uint32_t plot = 0; plot < scene->plots.count; ++plot)
+    {
+        // Reset each of these functions
+        // Delete every function data for now
+        glDeleteBuffers(1, &scene->plots.functions[plot].batch->vertex_buffer.vbo);
+        glDeleteVertexArrays(1, &scene->plots.functions[plot].batch->vao);
+        free(scene->plots.functions[plot].batch->vertex_buffer.data);
+        free(scene->plots.functions[plot].batch);
+
+        assert(scene->plots.functions[plot].samples);
+        free(scene->plots.functions[plot].samples);
+        scene->plots.functions[plot].count = 0;
+    }
+    scene->plots.count = 0;
+}
+
+void MorphResetPlotting(MorphPlotDevice *device)
+{
+    ResetRenderScene(device->scene);
+}
 
 double ImplicitCircle(double x, double y)
 {
@@ -1888,7 +1963,7 @@ void ImplicitFunctionPlot2D(MorphPlotDevice *device, ImplicitFn2D fn)
 {
     Scene         *scene     = device->scene;
 
-    const uint32_t max_verts = 5000;
+    const uint32_t max_verts = 10000;
 
     // First determine a point in the function using any method
     // My approach :
@@ -2100,13 +2175,13 @@ bool CreateAlternateFrameBuffer(uint32_t width, uint32_t height)
 
 void MorphPlot(MorphPlotDevice *device)
 {
-    Shader   vertex   = LoadShader("./src/shader/common_2D.vs", VERTEX_SHADER);
-    Shader   fragment = LoadShader("./src/shader/common_2D.fs", FRAGMENT_SHADER);
-    uint32_t program  = LoadProgram(vertex, fragment);
+    Shader vertex   = LoadShader("./src/shader/common_2D.vs", VERTEX_SHADER);
+    Shader fragment = LoadShader("./src/shader/common_2D.fs", FRAGMENT_SHADER);
+    program         = LoadProgram(vertex, fragment);
 
-    Mat4     identity;
+    Mat4   identity;
 
-    GLuint   fbo = CreateAlternateFrameBuffer(1080, 720);
+    GLuint fbo = CreateAlternateFrameBuffer(1080, 720);
     // Since all of them need to respond to function only once, it needs to go inside key callback
 
     while (!glfwWindowShouldClose(device->window))
@@ -2149,4 +2224,28 @@ void MorphPlot(MorphPlotDevice *device)
         glfwSwapBuffers(device->window);
         glfwPollEvents();
     }
+}
+
+void MorphPhantomShow(MorphPlotDevice *device)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    Draw(device, device->world_transform, device->scale_matrix, false);
+
+    glUseProgram(program);
+    Mat4 identity = MatrixMultiply(device->transform, &device->panel->render.local_transform);
+    glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_TRUE, (const GLfloat *)&identity.elem[0][0]);
+
+    glViewport(0, 0, screen_width, screen_height);
+    RenderPanel(device->panel, device->panel->render.font, device->transform);
+
+    device->panel->render.font_batch->vertex_buffer.count = 0;
+    device->scene->axes_labels.count                      = 0;
+
+    HandleEvents(device->window, device->scene, device->panner, device->graph, device->world_transform,
+                 device->scale_matrix, device->panel, device->new_transform, device->transform);
+
+    glfwSwapBuffers(device->window);
+    glfwPollEvents();
+
+    device->should_close = glfwWindowShouldClose(device->window); 
 }
