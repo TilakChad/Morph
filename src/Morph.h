@@ -25,17 +25,23 @@ typedef struct Vec3
     float z;
 } MVec3;
 
+typedef struct Range
+{
+    float min;
+    float max;
+    // float step;
+} Range;
+
 typedef double (*ParametricFn1D)(double);
 // Parameterized by a single parameter
 typedef MVec2 (*ParametricFn2D)(double);
 typedef double (*ImplicitFn2D)(double x, double y);
-
+typedef MVec2 (*VectorField2D)(double, double); // Parameteric representation of a vector field
+typedef MVec2 (*VectorField1D)(double);
 
 typedef struct
 {
-    unsigned int program;
-    unsigned int vao;
-    unsigned int vbo;
+    unsigned int program, vao, vbo;
     GLFWwindow  *window;
     Scene       *scene;
     Graph       *graph;
@@ -57,9 +63,9 @@ typedef struct
 
 // Exposed func
 MorphPlotDevice MorphCreateDevice();
-void MorphShow(MorphPlotDevice *device); // This call blocks
-void   MorphPhantomShow(MorphPlotDevice *); // This is non blocking
-void   MorphDestroyDevice(MorphPlotDevice *device);
+void            MorphShow(MorphPlotDevice *device);  // This call blocks
+void            MorphPhantomShow(MorphPlotDevice *); // This is non blocking
+void            MorphDestroyDevice(MorphPlotDevice *device);
 
 void   MorphPlotList(MorphPlotDevice *device, float *xpts, float *ypts, int length, MVec3 rgb, const char *cstronly);
 void   MorphPlotFunc(MorphPlotDevice *device, ParametricFn1D fn, MVec3 color, float xinit, float xend,
@@ -71,3 +77,6 @@ double MorphTimeSinceCreation(MorphPlotDevice *device);
 void   MorphResetPlotting(MorphPlotDevice *device);
 bool   MorphShouldWindowClose(MorphPlotDevice *device);
 void   ImplicitFunctionPlot2D(MorphPlotDevice *device, ImplicitFn2D fn);
+
+// On progress :
+void MorphPlotVectorField2D(VectorField2D field_2d, Range x, Range y); // Currently unimplemented

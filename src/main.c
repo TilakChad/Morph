@@ -42,6 +42,7 @@ int main(int argc, char **argv)
     glfwMakeContextCurrent(device.window);
 
     const double PI = 4 * atan(1);
+    // API related functions
     // ImplicitFunctionPlot2D(&device, ImplicitCircle);
     // ImplicitFunctionPlot2D(&device, ImplicitHeart);
     // MorphParametric2DPlot(device.scene, Circle2D, 0.0f, 1.67f, (MVec3){.x = 0.9f, .y = 0.9f}, "circle", 0.05f);
@@ -51,19 +52,19 @@ int main(int argc, char **argv)
     if (true)
     {
         // Plot1D(device.scene, GaussianIntegral, device.graph, (MVec3){0.1f, 0.1f, 0.75f}, "Nothing");
-     /*   Plot1D(device.scene, Square, device.graph, (MVec3){0.4f, 0.4f, 0.1f}, "Squared");
-        Plot1D(device.scene, lin, device.graph, (MVec3){0.9f, 0.1f, 0.1f}, "Squared");*/
+        /*   Plot1D(device.scene, Square, device.graph, (MVec3){0.4f, 0.4f, 0.1f}, "Squared");
+           Plot1D(device.scene, lin, device.graph, (MVec3){0.9f, 0.1f, 0.1f}, "Squared");*/
 
         uint32_t count = 0;
         MorphPlot(&device);
         MorphDestroyDevice(&device);
     }
 
- /*   if (true)*/
-    if (false)
+    // Enable to see the butterfly in action
+    else
     {
         // Animating gif of butterfly in action
-        const float step_size = 0.01f;
+        const float step_size = 0.1f;
         while (!MorphShouldWindowClose(&device))
         {
             float now = MorphTimeSinceCreation(&device);

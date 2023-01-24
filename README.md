@@ -73,3 +73,10 @@ int main()
 <p align = "center">
     <img src = "./interactive_demo.gif">
 
+## Taking screenshot 
+Press Ctrl-S to save screenshot <br> 
+Output image will be saved in the working directory : screenshot.bmp 
+
+# TODO  
+- Plotting of Vector Field 
+- Customizations

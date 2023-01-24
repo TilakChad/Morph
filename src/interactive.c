@@ -43,6 +43,7 @@ static void FillText(GPUBatch *font_data, Font *font, Pos2D position, String str
         x                              = x + glyph.Advance;
         font_data->vertex_buffer.count = font_data->vertex_buffer.count + sizeof(vertices);
     }
+    font_data->vertex_buffer.dirty = true;
 }
 
 static void InitPanel(Panel *panel)
@@ -85,7 +86,7 @@ Panel          *CreatePanel(uint32_t scr_w, uint32_t scr_h)
     panel->render.CaretAnim.t                        = 0;
     *(float *)&panel->render.CaretAnim.time_constant = 0.05f; // casting away the constness
 
-    panel->render.local_transform                    = TranslationMatrix(-panel->dimension.x,0.0f,0.0f);
+    panel->render.local_transform                    = TranslationMatrix(-panel->dimension.x, 0.0f, 0.0f);
     panel->render.Anim.hidden                        = true;
     return panel;
 }
@@ -170,7 +171,7 @@ static void UpdatePanel(Panel *panel)
 
             // In case of folding, panel->render.Anim.t should run backward
 
-            float offset = -panel->dimension.x + panel->dimension.x * panel->render.Anim.t;               
+            float offset = -panel->dimension.x + panel->dimension.x * panel->render.Anim.t;
 
             if (panel->render.Anim.hidden)
                 offset = panel->render.Anim.t * -panel->dimension.x;
@@ -390,19 +391,6 @@ typedef struct
     Panel *Panel;
 } UserData;
 
-// static void FrameChangeCallback(Panel* panel, Mat4* ortho_matrix, int width, int height)
-//{
-//     screen_width  = width;
-//     screen_height = height;
-//     glViewport(0, 0, width, height);
-//     UserData *data              = (UserData *)glfwGetWindowUserPointer(window);
-//     *data->OrthoMatrix          = OrthographicProjection(0, screen_width, 0, screen_height, -1, 1);
-//     data->Panel->dimension.x    = 0.30 * width;
-//     data->Panel->dimension.y    = height;
-//     data->Panel->origin.y       = height;
-//     data->Panel->origin.x       = 0;
-//     data->Panel->render.updated = true;
-// }
 void PanelFrameChangeCallback(Panel *panel, int width, int height)
 {
     screen_width  = width;
@@ -484,13 +472,19 @@ void PanelKeyCallback(Panel *panel, int key, int scancode, int action, int mods)
 
     if (key == GLFW_KEY_TAB && action == GLFW_PRESS)
     {
-        panel->render.Anim.hidden       = !panel->render.Anim.hidden;
+        panel->render.Anim.hidden     = !panel->render.Anim.hidden;
         panel->render.Anim.should_run = true;
         panel->render.Anim.last_time  = glfwGetTime();
         panel->render.Anim.t          = 0.0f;
     }
 }
 
+/// <summary>
+/// Test main
+/// </summary>
+/// <param name="argc"></param>
+/// <param name="argv"></param>
+/// <returns></returns>
 int nmain(int argc, char **argv)
 {
     GLFWwindow *window = LoadGLFW(screen_width, screen_height, "Interactive Panel Creation");

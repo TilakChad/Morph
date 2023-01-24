@@ -27,11 +27,10 @@
     <ClCompile Include="utility\bmp.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\interactive.h" />
     <ClInclude Include="src\Morph.h" />
     <ClInclude Include="src\parser.h" />
     <ClInclude Include="src\render_common.h" />
-    <ClInclude Include="src\stb_truetype.h" />
+    <ClInclude Include="utility\stb_truetype.h" />
     <ClInclude Include="utility\bmp.h" />
   </ItemGroup>
   <ItemGroup>

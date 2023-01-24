@@ -813,7 +813,7 @@ GPUBatch *CreateNewBatch(Primitives primitive)
 void DrawBatch(GPUBatch *batch, uint32_t counts)
 {
     glBindVertexArray(batch->vao);
-    glDrawArrays(batch->primitive, 0, counts - 5);
+    glDrawArrays(batch->primitive, 0, counts);
 }
 
 void PrepareBatch(GPUBatch *batch)
@@ -1455,6 +1455,7 @@ void RenderLabels(Scene *scene, Font *font, Graph *graph, Mat4 *combined_matrix)
 // From computation context not handled yet
 bool InvokeAndTestFunction(void *function, FunctionType type, MVec2 vec)
 {
+    // TODO :: For function from computation context
     switch (type)
     {
     case PARAMETRIC_1D:
@@ -1563,23 +1564,6 @@ void HandleEvents(GLFWwindow *window, Scene *scene, State *state, Graph *graph, 
         // Update the ortho projection matrix and restore to its previous position later on
     }
 }
-
-// Functions related to API
-// To expose to API we need two sets of data .. first the original values and second scaled values
-
-// void APIRecalculate(MorphPlotDevice *device)
-//{
-//     device->render_scene->vCount = 0;
-//     MVec2 vec;
-//     for (int re = 0; re < device->render_scene->pCount; ++re)
-//     {
-//         vec.x = device->graph->center.x +
-//                 device->render_scene->Points[re].x * device->graph->slide_scale.x / (device->graph->scale.x);
-//         vec.y = device->graph->center.y +
-//                 device->render_scene->Points[re].y * device->graph->slide_scale.y / (device->graph->scale.y);
-//         AddSingleVertex(device->render_scene, vec);
-//     }
-// }
 
 Shader LoadShadersFromString(const char *cstr, ShaderType type)
 {
@@ -1740,45 +1724,6 @@ MorphPlotDevice MorphCreateDevice()
 
     return device;
 }
-//
-// void MorphPlotFunc(MorphPlotDevice *device, ParametricFn1D fn, MVec3 rgb, float xstart, float xend,
-//                   const char *cstronly, float samplesize)
-//{
-//    float init = -10.0f;
-//    float term = 10.0f;
-//    float step = 0.05f;
-//    if (fabsf(xstart - xend) > FLT_EPSILON)
-//    {
-//        init = xstart > xend ? xend : xstart;
-//        term = xstart > xend ? xstart : xend;
-//    }
-//    if (samplesize > FLT_EPSILON)
-//        step = samplesize;
-//    MVec2 vec;
-//
-//    for (float x = init; x <= term; x += step)
-//    {
-//        // This API version doesn't check for discontinuity .. Above function checks for discontinuity of one
-//        function vec.x = x; vec.y = fn(vec.x); AddSinglePoint(device->render_scene, vec);
-//    }
-//    // Add number of vertices in the current graph
-//    assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
-//    device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
-//    device->render_scene->graphcolor[device->render_scene->graphcount - 1] = rgb;
-//    device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
-//}
-
-// void MorphParametric2DPlot(MorphPlotDevice *device, ParametricFn2D fn, float tInit, float tTerm, MVec3 rgb,
-//                            const char *cstronly, float step)
-//{
-//     MVec2 vec;
-//     for (float t = tInit; t <= tTerm; t += step)
-//         AddSinglePoint(device->render_scene, fn(t));
-//     assert(device->render_scene->graphcount < device->render_scene->cMaxGraph);
-//     device->render_scene->graphbreak[device->render_scene->graphcount++]   = device->render_scene->pCount;
-//     device->render_scene->graphcolor[device->render_scene->graphcount - 1] = rgb;
-//     device->render_scene->graphname[device->render_scene->graphcount - 1]  = cstronly;
-// }
 
 double MorphTimeSinceCreation(MorphPlotDevice *device)
 {
@@ -1796,80 +1741,11 @@ double MorphTimeSinceCreation(MorphPlotDevice *device)
 
     return elapsed_time;
 }
-//
-// void APIReset(MorphPlotDevice *device, uint32_t hold)
-//{
-//    device->render_scene->fCount     = 0;
-//    device->render_scene->graphcount = hold;
-//}
 
 bool MorphShouldWindowClose(MorphPlotDevice *device)
 {
     return device->should_close;
 }
-
-// void MorphShow(MorphPlotDevice *device)
-//{
-//     glfwShowWindow(device->window);
-//     State    panner = {0};
-//
-//     uint32_t hold   = device->render_scene->graphcount;
-//
-//     while (!glfwWindowShouldClose(device->window))
-//     {
-//         glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
-//         glClear(GL_COLOR_BUFFER_BIT);
-//         // Instead of re-rendering, change the scale of the already plotted points
-//         APIReset(device, hold);
-//         APIRecalculate(device);
-//         RenderGraph(device->graph);
-//         glUseProgram(device->program);
-//         glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE,
-//         &device->transform->elem[0][0]); glBindVertexArray(device->vao); glBindBuffer(GL_ARRAY_BUFFER,
-//         device->vbo);
-//
-//         RenderLabels(device->render_scene, device->font, device->graph, device->transform);
-//         DrawLegends(device->render_scene, device->font, device->graph);
-//         RenderRenderScene(device->render_scene, device->program, false);
-//         RenderFont(device->render_scene, device->font, device->transform);
-//
-//         HandleEvents(device->window, &panner, device->graph);
-//         glfwSwapBuffers(device->window);
-//         glfwPollEvents();
-//     }
-// }
-
-// void MorphPhantomShow(MorphPlotDevice *device)
-//{
-//     uint32_t hold = device->render_scene->graphcount;
-//
-//     glfwShowWindow(device->window);
-//     glfwMakeContextCurrent(device->window);
-//
-//     glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
-//     glClear(GL_COLOR_BUFFER_BIT);
-//
-//     APIReset(device, hold);
-//     APIRecalculate(device);
-//     RenderGraph(device->graph);
-//
-//     glUseProgram(device->program);
-//     glUniformMatrix4fv(glGetUniformLocation(device->program, "scene"), 1, GL_TRUE,
-//     &device->transform->elem[0][0]); glBindVertexArray(device->vao); glBindBuffer(GL_ARRAY_BUFFER, device->vbo);
-//
-//     RenderLabels(device->render_scene, device->font, device->graph, device->transform);
-//     DrawLegends(device->render_scene, device->font, device->graph);
-//     RenderRenderScene(device->render_scene, device->program, false);
-//     RenderFont(device->render_scene, device->font, device->transform);
-//
-//     glfwSwapBuffers(device->window);
-//
-//     HandleEvents(device->window, device->panner, device->graph);
-//     glfwPollEvents();
-//
-//     device->render_scene->graphcount -= hold + 1;
-//     device->should_close = glfwWindowShouldClose(device->window);
-// }
 
 void MorphDestroyDevice(MorphPlotDevice *device)
 {
@@ -2101,43 +1977,6 @@ void Draw(MorphPlotDevice *device, Mat4 *translate, Mat4 *scale, bool show_point
     device->graph->slide_scale.y = Y;
 }
 
-// void MorphPlot(MorphPlotDevice *device)
-//{
-//     Shader   vertex   = LoadShader("./src/shader/common_2D.vs", VERTEX_SHADER);
-//     Shader   fragment = LoadShader("./src/shader/common_2D.fs", FRAGMENT_SHADER);
-//     uint32_t program  = LoadProgram(vertex, fragment);
-//
-//     Mat4     identity;
-//
-//     // Since all of them need to respond to function only once, it needs to go inside key callback
-//
-//     while (!glfwWindowShouldClose(device->window))
-//     {
-//         // matrix = MatrixMultiply(device->world_transform, device->scale_matrix);
-//         // RenderGraph(device->graph, device->world_transform);
-//         // RenderScene(device->scene, device->program, false, device->transform, &matrix);
-//         // RenderLabels(device->scene, device->font, device->graph, &matrix);
-//         // RenderFont(device->scene, device->font, device->transform);
-//         Draw(device, device->world_transform, device->scale_matrix, false);
-//
-//         glUseProgram(program);
-//         identity = MatrixMultiply(device->transform, &device->panel->render.local_transform);
-//         glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_TRUE,
-//                            (const GLfloat *)&identity.elem[0][0]);
-//
-//         glViewport(0, 0, screen_width, screen_height);
-//         RenderPanel(device->panel, device->panel->render.font, device->transform);
-//
-//         device->panel->render.font_batch->vertex_buffer.count = 0;
-//         device->scene->axes_labels.count                      = 0;
-//
-//         HandleEvents(device->window, device->scene, device->panner, device->graph, device->world_transform,
-//                      device->scale_matrix, device->panel, device->new_transform, device->transform);
-//         glfwSwapBuffers(device->window);
-//         glfwPollEvents();
-//     }
-// }
-
 bool CreateAlternateFrameBuffer(uint32_t width, uint32_t height)
 {
     GLuint fbo;
@@ -2186,41 +2025,23 @@ void MorphPlot(MorphPlotDevice *device)
 
     while (!glfwWindowShouldClose(device->window))
     {
-        // matrix = MatrixMultiply(device->world_transform, device->scale_matrix);
-        // RenderGraph(device->graph, device->world_transform);
-        // RenderScene(device->scene, device->program, false, device->transform, &matrix);
-        // RenderLabels(device->scene, device->font, device->graph, &matrix);
-        // RenderFont(device->scene, device->font, device->transform);
-        if (active_fbo == 0)
-        {
 
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            Draw(device, device->world_transform, device->scale_matrix, false);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        Draw(device, device->world_transform, device->scale_matrix, false);
 
-            glUseProgram(program);
-            identity = MatrixMultiply(device->transform, &device->panel->render.local_transform);
-            glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_TRUE,
-                               (const GLfloat *)&identity.elem[0][0]);
+        glUseProgram(program);
+        identity = MatrixMultiply(device->transform, &device->panel->render.local_transform);
+        glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_TRUE,
+                           (const GLfloat *)&identity.elem[0][0]);
 
-            glViewport(0, 0, screen_width, screen_height);
-            RenderPanel(device->panel, device->panel->render.font, device->transform);
+        glViewport(0, 0, screen_width, screen_height);
+        RenderPanel(device->panel, device->panel->render.font, device->transform);
 
-            device->panel->render.font_batch->vertex_buffer.count = 0;
-            device->scene->axes_labels.count                      = 0;
+        device->panel->render.font_batch->vertex_buffer.count = 0;
+        device->scene->axes_labels.count                      = 0;
 
-            HandleEvents(device->window, device->scene, device->panner, device->graph, device->world_transform,
-                         device->scale_matrix, device->panel, device->new_transform, device->transform);
-        }
-        else
-        {
-            // Blit just once
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, active_fbo);
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-
-            glBlitFramebuffer(0, 0, 1080, 720, 0, 0, screen_width, screen_height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
-
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        }
+        HandleEvents(device->window, device->scene, device->panner, device->graph, device->world_transform,
+                     device->scale_matrix, device->panel, device->new_transform, device->transform);
         glfwSwapBuffers(device->window);
         glfwPollEvents();
     }
@@ -2247,5 +2068,11 @@ void MorphPhantomShow(MorphPlotDevice *device)
     glfwSwapBuffers(device->window);
     glfwPollEvents();
 
-    device->should_close = glfwWindowShouldClose(device->window); 
+    device->should_close = glfwWindowShouldClose(device->window);
+}
+
+void MorphPlotVectorField2D(VectorField2D field_2d, Range x, Range y)
+{
+    // On progress
+    // Unimplemented();
 }
