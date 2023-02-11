@@ -112,7 +112,7 @@ static void PrepareFontBatch(GPUBatch *batch)
     }
 }
 
-static void PrepareVertexBatch(GPUBatch *batch)
+void PrepareVertexBatch(GPUBatch *batch)
 {
     if (batch->vertex_buffer.dirty)
     {

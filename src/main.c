@@ -35,6 +35,11 @@ MVec2 Butterfly2D(double t)
     return point;
 }
 
+MVec2 VectorFieldXY(double x, double y)
+{
+    return (MVec2){.x = x, .y = y};
+}
+
 int main(int argc, char **argv)
 {
     MorphPlotDevice device = MorphCreateDevice();
@@ -49,13 +54,14 @@ int main(int argc, char **argv)
 
     /* MorphParametric2DPlot(device.scene, Butterfly2D, 0.0f, 12 * PI, (MVec3){.x = 0.1f, .y = 0.2f, .z = 0.9f},
                            "Butterfly", 0.1f);*/
+
     if (true)
     {
         // Plot1D(device.scene, GaussianIntegral, device.graph, (MVec3){0.1f, 0.1f, 0.75f}, "Nothing");
         /*   Plot1D(device.scene, Square, device.graph, (MVec3){0.4f, 0.4f, 0.1f}, "Squared");
            Plot1D(device.scene, lin, device.graph, (MVec3){0.9f, 0.1f, 0.1f}, "Squared");*/
 
-        uint32_t count = 0;
+        MorphPlotVectorField2D(&device, VectorFieldXY, (Range){-5.0f, 5.0f}, (Range){-5.0f, 5.0f});
         MorphPlot(&device);
         MorphDestroyDevice(&device);
     }
@@ -64,7 +70,7 @@ int main(int argc, char **argv)
     else
     {
         // Animating gif of butterfly in action
-        const float step_size = 0.1f;
+        const float step_size = 0.05f;
         while (!MorphShouldWindowClose(&device))
         {
             float now = MorphTimeSinceCreation(&device);

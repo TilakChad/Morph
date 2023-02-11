@@ -79,4 +79,4 @@ bool   MorphShouldWindowClose(MorphPlotDevice *device);
 void   ImplicitFunctionPlot2D(MorphPlotDevice *device, ImplicitFn2D fn);
 
 // On progress :
-void MorphPlotVectorField2D(VectorField2D field_2d, Range x, Range y); // Currently unimplemented
+void MorphPlotVectorField2D(MorphPlotDevice* device, VectorField2D field_2d, Range x, Range y); // Currently unimplemented

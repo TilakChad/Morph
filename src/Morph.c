@@ -752,6 +752,23 @@ typedef struct FunctionPlotData
     char          plot_name[25];
 } FunctionPlotData;
 
+typedef struct VectorData
+{
+    float x, y, r, g, b;
+} VectorData;
+
+typedef struct VectorPlotData
+{
+    bool           updated;
+    GPUBatch      *batch;
+    VectorField2D *field;
+    uint32_t       max;
+    uint32_t       count;
+    // Color range
+    VectorData *points;
+    // Color, to be decided
+} VectorPlotData;
+
 typedef struct FontData
 {
     bool      updated;
@@ -770,6 +787,14 @@ typedef struct PlotArray
     FunctionPlotData *functions;
 } PlotArray;
 
+typedef struct VectorArray
+{
+    uint32_t        shader_program;
+    uint32_t        max;
+    uint32_t        count;
+    VectorPlotData *vector_fields;
+} VectorArray;
+
 typedef struct FontArray
 {
     uint32_t  max;
@@ -779,9 +804,10 @@ typedef struct FontArray
 
 typedef struct Scene
 {
-    PlotArray plots;
-    FontData  axes_labels;
-    FontData  legends;
+    PlotArray   plots;
+    FontData    axes_labels;
+    FontData    legends;
+    VectorArray fields;
 } Scene;
 
 struct State
@@ -916,6 +942,7 @@ void Init2DScene(Scene *scene)
     memset(scene, 0, sizeof(*scene));
     // Init enough memory for 10 graphs
     scene->plots.max               = 10;
+    scene->plots.count             = 0;
     scene->plots.functions         = malloc(sizeof(*scene->plots.functions) * scene->plots.max);
     scene->plots.current_selection = -1;
 
@@ -925,6 +952,11 @@ void Init2DScene(Scene *scene)
         scene->plots.functions[plot].count = 0; */
         memset(scene->plots.functions + plot, 0, sizeof(*scene->plots.functions));
     }
+
+    scene->fields.max           = 10;
+    scene->fields.count         = 0;
+    scene->fields.vector_fields = malloc(sizeof(*scene->fields.vector_fields) * scene->fields.max);
+    memset(scene->fields.vector_fields, 0, sizeof(*scene->fields.vector_fields) * scene->fields.max);
 
     scene->axes_labels.count   = 0;
     scene->axes_labels.max     = 500000;
@@ -959,6 +991,29 @@ void RenderScene(Scene *scene, unsigned int program, bool showPoints, Mat4 *msce
 
         PrepareBatch(function->batch);
         DrawBatch(function->batch, function->batch->vertex_buffer.count / (4 * 4));
+    }
+
+    Mat4 product = MatrixMultiply(mscene, transform);
+    // Vector functions are plotted using a different shader program
+    glUseProgram(scene->fields.shader_program);
+    glUniformMatrix4fv(glGetUniformLocation(scene->fields.shader_program, "transform"), 1, GL_TRUE,
+                       &product.elem[0][0]);
+
+    for (uint32_t id = 0; id < scene->fields.count; ++id)
+    {
+        VectorPlotData *field = &scene->fields.vector_fields[id];
+        if (field->updated)
+        {
+            assert(field->count * 5 * 4 < field->batch->vertex_buffer.max);
+            memcpy(field->batch->vertex_buffer.data, field->points, field->count * 5 * 4);
+            field->batch->vertex_buffer.count = field->count * 5 * 4;
+            field->updated                    = false;
+            field->batch->vertex_buffer.dirty = true;
+        }
+
+        // Nice one
+        PrepareVertexBatch(field->batch);
+        DrawBatch(field->batch, field->batch->vertex_buffer.count / (5 * 4));
     }
 }
 
@@ -2014,9 +2069,11 @@ bool CreateAlternateFrameBuffer(uint32_t width, uint32_t height)
 
 void MorphPlot(MorphPlotDevice *device)
 {
-    Shader vertex   = LoadShader("./src/shader/common_2D.vs", VERTEX_SHADER);
-    Shader fragment = LoadShader("./src/shader/common_2D.fs", FRAGMENT_SHADER);
-    program         = LoadProgram(vertex, fragment);
+    Shader vertex                        = LoadShader("./src/shader/common_2D.vs", VERTEX_SHADER);
+    Shader fragment                      = LoadShader("./src/shader/common_2D.fs", FRAGMENT_SHADER);
+    program                              = LoadProgram(vertex, fragment);
+
+    device->scene->fields.shader_program = program;
 
     Mat4   identity;
 
@@ -2071,8 +2128,82 @@ void MorphPhantomShow(MorphPlotDevice *device)
     device->should_close = glfwWindowShouldClose(device->window);
 }
 
-void MorphPlotVectorField2D(VectorField2D field_2d, Range x, Range y)
+static void DrawVector(VectorPlotData *plot, MVec2 pos, MVec2 dir)
+{
+    assert(plot->count + 6 < plot->max);
+
+    // Normalize the direction first
+    float mag                     = sqrt(dir.x * dir.x + dir.y * dir.y);
+    MVec2 unit                    = (MVec2){.x = dir.x / mag, .y = dir.y / mag};
+    MVec2 norm                    = (MVec2){.x = -unit.y, .y = unit.x};
+
+    float t                       = 0.01f;
+
+    MVec2 end                     = {.x = pos.x + 0.5f * unit.x, .y = pos.y + 0.5f * unit.y};
+
+    plot->points[plot->count].x   = pos.x + t * norm.x;
+    plot->points[plot->count].y   = pos.y + t * norm.y;
+    plot->points[plot->count].r   = 0.0f;
+    plot->points[plot->count].g   = 1.0f;
+    plot->points[plot->count++].b = 0.0f;
+
+    plot->points[plot->count].x   = pos.x - t * norm.x;
+    plot->points[plot->count].y   = pos.y - t * norm.y;
+    plot->points[plot->count].r   = 0.0f;
+    plot->points[plot->count].g   = 1.0f;
+    plot->points[plot->count++].b = 0.0f;
+
+    plot->points[plot->count].x   = end.x + t * norm.x;
+    plot->points[plot->count].y   = end.y + t * norm.y;
+    plot->points[plot->count].r   = 0.0f;
+    plot->points[plot->count].g   = 1.0f;
+    plot->points[plot->count++].b = 0.0f;
+
+    plot->points[plot->count].x   = pos.x - t * norm.x;
+    plot->points[plot->count].y   = pos.y - t * norm.y;
+    plot->points[plot->count].r   = 0.0f;
+    plot->points[plot->count].g   = 1.0f;
+    plot->points[plot->count++].b = 0.0f;
+
+    plot->points[plot->count].x   = end.x + t * norm.x;
+    plot->points[plot->count].y   = end.y + t * norm.y;
+    plot->points[plot->count].r   = 0.0f;
+    plot->points[plot->count].g   = 1.0f;
+    plot->points[plot->count++].b = 0.0f;
+
+    plot->points[plot->count].x   = end.x - t * norm.x;
+    plot->points[plot->count].y   = end.y - t * norm.y;
+    plot->points[plot->count].r   = 0.0f;
+    plot->points[plot->count].g   = 1.0f;
+    plot->points[plot->count++].b = 0.0f;
+}
+
+void MorphPlotVectorField2D(MorphPlotDevice *device, VectorField2D field_2d, Range x, Range y)
 {
     // On progress
     // Unimplemented();
+    // Every elements are rendered using lines, but we don't care much as how each line is rendered separately
+    // Allocate enough vector first
+
+    const uint32_t max_verts                      = 10000;
+    device->scene->fields.vector_fields[0].max    = max_verts; // 1000 vertices for each graph at most
+    device->scene->fields.vector_fields[0].points = malloc(sizeof(VectorData) * max_verts);
+    device->scene->fields.vector_fields[0].count  = 0;
+    assert(device->scene->fields.vector_fields[0].points);
+
+    float step = 0.5f;
+    for (float u = x.min; u <= x.max; u += step)
+    {
+        for (float v = y.min; v <= y.max; v += step)
+        {
+            // Render a line with arrow facing the vector direction
+            // The array are supposed to be discontinuous too, so how should it be plotted?
+            DrawVector(&device->scene->fields.vector_fields[0], (MVec2){u, v}, (MVec2){u, v});
+        }
+    }
+
+    // DrawVector(&device->scene->fields.vector_fields[0], (MVec2){0.0f, 0.0f}, (MVec2){1.0f, 1.0f});
+    device->scene->fields.vector_fields[0].batch   = CreateNewBatch(GL_TRIANGLES);
+    device->scene->fields.vector_fields[0].updated = true;
+    device->scene->fields.count                    = 1;
 }
